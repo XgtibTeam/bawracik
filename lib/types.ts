@@ -1,0 +1,207 @@
+// ============================================================
+// Skema data pusat — BAW Group (Biang Aroma Wangi x Me.Racik x Racik Parfum)
+// Gabungan sistem Absensi + Webstore Parfum
+// ============================================================
+
+// ---------- ROLE & AUTH ----------
+
+export type Role = 'superadmin' | 'admin' | 'kasir' | 'member';
+
+// Session yang disimpan di cookie (signed, lihat lib/auth.ts)
+export type Session = {
+  role: Role;
+  username: string; // untuk member, ini nomor WA
+  cabangId: string | null; // null untuk superadmin (akses semua cabang)
+  nama: string;
+  expires: number;
+};
+
+// ---------- CABANG (bin: branches) ----------
+
+export type Branch = {
+  id: string;
+  nama: string;
+  alamat?: string;
+  waCS?: string; // nomor WA customer service cabang ini
+  createdAt: string;
+};
+
+// ---------- KARYAWAN / ADMIN (bin: employees) ----------
+// Menggantikan bin `employees` lama (dulu cuma string[] nama).
+// String[] lama tetap dibaca lib/jsonbin.ts sbg fallback migrasi.
+
+export type Employee = {
+  id: string;
+  nama: string;
+  username: string;
+  passwordHash: string; // bcrypt
+  role: 'superadmin' | 'admin' | 'kasir';
+  cabangId: string | null; // null hanya untuk superadmin
+  createdAt: string;
+};
+
+// ---------- PROFIL TOKO (bin: store_profile) ----------
+
+export type HomeSection = {
+  id: string;
+  type: 'banner' | 'teks' | 'gambar' | 'promo';
+  judul?: string;
+  isi?: string; // teks/promo
+  gambarUrl?: string; // banner/gambar
+};
+
+export type StoreProfile = {
+  namaToko: string; // "Biang Aroma X Me.Racik Parfum"
+  deskripsi: string;
+  logoUrl: string; // Google Drive file id atau URL
+  socialMedia: {
+    instagram?: string;
+    whatsapp?: string;
+    tiktok?: string;
+  };
+  pembayaran: {
+    qrisImageUrl?: string;
+    dana?: string;
+    seabank?: string;
+  };
+  homeSections: HomeSection[]; // section homepage, urutan & isi diatur admin
+  updatedAt: string;
+};
+
+// ---------- HARGA PER-ML & BOTOL (bin: pricing) ----------
+
+// Pilihan harga parfum per ml, admin bisa tambah/kurang tapi defaultnya 2k s.d. 10k
+export type MlPriceTier = {
+  hargaPerMl: number; // 2000, 3000, ..., 10000
+};
+
+// Harga botol berdasarkan ukuran (auto ditambahkan ke total saat checkout)
+export type BottlePriceTier = {
+  minMl: number;
+  maxMl: number;
+  harga: number; // 5000 utk 3-35ml, 10000 utk 50-100ml
+};
+
+export type PricingConfig = {
+  mlTiers: MlPriceTier[];
+  bottleTiers: BottlePriceTier[];
+  ecerMaxMl: number; // batas ukuran botol maksimal utk transaksi ecer (default 100ml)
+  grosirMaxMl: number; // batas ukuran botol maksimal utk transaksi grosir (default 1000ml)
+  updatedAt: string;
+};
+
+// ---------- PRODUK (Supabase table: products) ----------
+// Dipindah dari JSONBin ke Supabase supaya bisa nampung deskripsi & dipakai
+// bareng sistem katalog/cart ala e-commerce.
+
+export type Product = {
+  id: string;
+  nama: string;
+  deskripsi: string; // ditampilkan saat produk di-tap di katalog
+  kode?: string;
+  hargaJual?: number; // opsional, untuk produk non-parfum-isi-ulang
+  imageUrl?: string; // link publik Google Drive (folder produk)
+  isBotol: boolean;
+  ukuranBotolMl?: number; // kalau isBotol true
+  createdAt: string;
+};
+
+// ---------- MEMBER (bin: members) ----------
+
+export type MemberPurchaseHistory = {
+  tanggal: string;
+  parfum: string[];
+  totalMl: number;
+  totalHarga: number;
+  pengisianKe: number; // 1-10, direset ke 0 setelah 10
+  poinDidapat: number;
+  cabangId: string;
+  transactionId: string; // ref ke Supabase transactions.id
+};
+
+export type Member = {
+  id: string;
+  nama: string;
+  wa: string; // nomor WA, dipakai sbg login member area
+  poinTotal: number; // akumulasi total, TIDAK PERNAH direset
+  poinSaatIni: number; // direset ke 0 tiap 10x pengisian
+  pengisianKe: number; // 0-10, reset ke 0 setelah mencapai 10
+  totalPenukaran: number; // berapa kali sudah mencapai 10 & reset
+  riwayat: MemberPurchaseHistory[];
+  kodeReferral: string; // 5 digit random, milik member ini
+  direferralOleh?: string; // kodeReferral member lain (jika didaftarkan via referral)
+  createdAt: string;
+};
+
+// ---------- VOUCHER (bin: vouchers) ----------
+
+export type Voucher = {
+  code: string; // 5 digit random
+  tipe: 'persen' | 'potongan';
+  nilai: number; // persen (0-100) atau nominal rupiah
+  aktif: boolean;
+  expiresAt?: string;
+  dipakaiOleh: string[]; // member id yang sudah pakai
+  createdAt: string;
+};
+
+// ---------- FEEDS BAWRACIK (Supabase table: feed_posts/feed_likes/feed_comments) ----------
+
+export type FeedPost = {
+  id: string;
+  caption: string;
+  imageUrl: string;
+  createdBy?: string;
+  createdAt: string;
+  likeCount: number;
+  commentCount: number;
+  likedByMe?: boolean;
+};
+
+export type FeedComment = {
+  id: string;
+  postId: string;
+  nama: string;
+  isi: string;
+  createdAt: string;
+};
+
+// ---------- TRANSAKSI (Supabase table: transactions) ----------
+// Disimpan di Supabase (rekap), bukan JSONBin.
+
+export type TransactionItem = {
+  productId?: string;
+  namaParfum: string;
+  ml: number;
+  hargaPerMl: number;
+  subtotal: number;
+};
+
+export type Transaction = {
+  id: string;
+  cabangId: string;
+  karyawanId: string | null; // null jika self-checkout oleh customer
+  memberId: string | null;
+  items: TransactionItem[];
+  totalMl: number;
+  totalHarga: number;
+  biayaBotol: number; // dari bottleTiers, sudah termasuk di totalHarga
+  tipe: 'grosir' | 'ecer';
+  metodeCheckout: 'kasir' | 'self';
+  voucherCode?: string;
+  createdAt: string;
+};
+
+// ---------- REKAP STOK (Supabase table: stock_recap) ----------
+
+export type StockRecap = {
+  id: string;
+  cabangId: string;
+  productId: string;
+  periode: 'harian' | 'bulanan' | 'tahunan';
+  tanggal: string; // YYYY-MM-DD (harian) / YYYY-MM (bulanan) / YYYY (tahunan)
+  stokAwal: number;
+  stokAkhir: number;
+  createdBy: string; // employee id
+  createdAt: string;
+};
