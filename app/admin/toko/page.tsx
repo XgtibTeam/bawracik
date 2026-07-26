@@ -476,10 +476,13 @@ function KaryawanTab() {
   const [role, setRole] = useState<'admin' | 'kasir'>('kasir');
   const [cabangId, setCabangId] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [myRole, setMyRole] = useState<string | null>(null);
+  const isSuperadmin = myRole === 'superadmin';
 
   function load() {
     fetch('/api/employees').then((r) => r.json()).then((d) => setEmployees(d.employees || []));
     fetch('/api/branches').then((r) => r.json()).then((d) => setBranches(d.branches || []));
+    fetch('/api/auth/me').then((r) => r.json()).then((d) => setMyRole(d.session?.role ?? null));
   }
   useEffect(load, []);
 
@@ -522,8 +525,11 @@ function KaryawanTab() {
             className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"
           >
             <option value="kasir">Kasir</option>
-            <option value="admin">Admin Cabang</option>
+            {isSuperadmin && <option value="admin">Admin Cabang</option>}
           </select>
+          {!isSuperadmin && (
+            <p className="mt-1 text-[11px] text-ink/40">Hanya superadmin yang bisa membuat akun Admin Cabang.</p>
+          )}
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-ink/60">Cabang</label>
@@ -553,9 +559,11 @@ function KaryawanTab() {
               <span>
                 {e.nama} ({e.username}) — <span className="capitalize text-ink/50">{e.role}</span>
               </span>
-              <button onClick={() => deleteEmployee(e.id)} className="text-xs text-danger">
-                Hapus
-              </button>
+              {(isSuperadmin || e.role !== 'admin') && (
+                <button onClick={() => deleteEmployee(e.id)} className="text-xs text-danger">
+                  Hapus
+                </button>
+              )}
             </li>
           ))}
         </ul>
