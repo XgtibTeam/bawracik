@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
-import { getMembers, saveMembers, getBranches, getStoreProfile, getPricingConfig, getVouchers, saveVouchers } from '@/lib/jsonbin';
-import { insertTransaction } from '@/lib/supabase';
+import { getMembers, saveMembers, getBranches, getStoreProfile, getVouchers, saveVouchers } from '@/lib/jsonbin';
+import { insertTransaction, getPricingConfig } from '@/lib/supabase';
 import { hitungCheckout, hitungDiskonVoucher, hitungPoinDariMl, updatePengisian, type ChargeableItem } from '@/lib/calc';
 import { buildWaMessage, buildWaLink } from '@/lib/wa-template';
+import { normalizeWa } from '@/lib/phone';
 import type { TransactionItem } from '@/lib/types';
 
 // Body (dipakai kasir maupun self-checkout customer):
@@ -52,12 +53,13 @@ export async function POST(req: NextRequest) {
       if (body.member.id) {
         member = members.find((m) => m.id === body.member.id) ?? null;
       } else if (body.member.wa) {
-        member = members.find((m) => m.wa === body.member.wa) ?? null;
+        const waNormal = normalizeWa(body.member.wa);
+        member = members.find((m) => normalizeWa(m.wa) === waNormal) ?? null;
         if (!member && body.member.nama) {
           member = {
             id: randomUUID(),
             nama: body.member.nama,
-            wa: body.member.wa,
+            wa: waNormal,
             poinTotal: 0,
             poinSaatIni: 0,
             pengisianKe: 0,
@@ -141,9 +143,11 @@ export async function POST(req: NextRequest) {
     // ---- Simpan transaksi ke Supabase (rekap) ----
     const transactionId = randomUUID();
     const txItems: TransactionItem[] = calc.items.map((it) => ({
+      productId: it.productId,
       namaParfum: it.namaParfum,
       ml: it.ml,
       hargaPerMl: it.hargaPerMl,
+      ukuranBotolMl: it.ukuranBotolMl,
       subtotal: it.subtotal,
     }));
 

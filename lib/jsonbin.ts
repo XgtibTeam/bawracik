@@ -87,6 +87,9 @@ export type AttendanceRecord = {
   jam: string; // HH:mm:ss (Asia/Jakarta)
   timestamp: string; // ISO string, waktu server saat submit
   fotoPath: string; // Google Drive File ID
+  shift?: 'Pagi' | 'Siang' | '-'; // auto-detect dari jam kedatangan, lihat lib/shift.ts
+  statusKehadiran?: 'Tepat Waktu' | 'Terlambat' | '-';
+  telatMenit?: number;
 };
 
 export async function getAttendanceRecords(): Promise<AttendanceRecord[]> {
@@ -163,6 +166,7 @@ const DEFAULT_STORE_PROFILE: StoreProfile = {
   namaToko: 'Biang Aroma X Me.Racik Parfum',
   deskripsi: '',
   logoUrl: '',
+  logos: [],
   socialMedia: {},
   pembayaran: {},
   homeSections: [],
@@ -171,8 +175,12 @@ const DEFAULT_STORE_PROFILE: StoreProfile = {
 
 export async function getStoreProfile(): Promise<StoreProfile> {
   const profile = await getCollection<StoreProfile>('JSONBIN_BIN_ID_STORE_PROFILE', DEFAULT_STORE_PROFILE);
-  // Migrasi: profil lama yang tersimpan sebelum ada homeSections
-  return { ...profile, homeSections: profile.homeSections ?? [] };
+  // Migrasi: profil lama yang tersimpan sebelum ada homeSections/logos
+  return {
+    ...profile,
+    homeSections: profile.homeSections ?? [],
+    logos: Array.isArray(profile.logos) ? profile.logos : [],
+  };
 }
 export async function saveStoreProfile(profile: StoreProfile): Promise<void> {
   await saveCollection('JSONBIN_BIN_ID_STORE_PROFILE', {
@@ -182,44 +190,30 @@ export async function saveStoreProfile(profile: StoreProfile): Promise<void> {
 }
 
 // ============================================================
-// HARGA (bin: pricing) — tier harga per-ml & harga botol
+// HARGA — DIPINDAH KE SUPABASE, lihat lib/supabase.ts.
 // ============================================================
 
-const DEFAULT_PRICING: PricingConfig = {
-  mlTiers: [2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000].map((hargaPerMl) => ({
-    hargaPerMl,
-  })),
-  bottleTiers: [
-    { minMl: 3, maxMl: 35, harga: 5000 },
-    { minMl: 36, maxMl: 1000, harga: 10000 },
-  ],
-  ecerMaxMl: 100,
-  grosirMaxMl: 1000,
-  updatedAt: new Date(0).toISOString(),
-};
-
-export async function getPricingConfig(): Promise<PricingConfig> {
-  const config = await getCollection<PricingConfig>('JSONBIN_BIN_ID_PRICING', DEFAULT_PRICING);
-  // Migrasi: config lama yang belum punya ecerMaxMl/grosirMaxMl
-  return {
-    ...config,
-    ecerMaxMl: config.ecerMaxMl ?? DEFAULT_PRICING.ecerMaxMl,
-    grosirMaxMl: config.grosirMaxMl ?? DEFAULT_PRICING.grosirMaxMl,
-  };
-}
-export async function savePricingConfig(config: PricingConfig): Promise<void> {
-  await saveCollection('JSONBIN_BIN_ID_PRICING', { ...config, updatedAt: new Date().toISOString() });
-}
-
-// Catatan: PRODUK sekarang disimpan di Supabase (lib/supabase.ts), bukan di sini
-// lagi — supaya bisa nampung deskripsi & dipakai sistem katalog/cart.
+// ============================================================
+// PRODUK & HARGA — DIPINDAH KE SUPABASE (lib/supabase.ts), tidak lagi di
+// JSONBin. Lihat getProducts/saveProducts/getPricingConfig/savePricingConfig
+// di lib/supabase.ts. Jalankan supabase-schema.sql sebelum deploy.
+// ============================================================
 
 // ============================================================
 // MEMBER (bin: members)
 // ============================================================
 
 export async function getMembers(): Promise<Member[]> {
-  return getCollection<Member[]>('JSONBIN_BIN_ID_MEMBERS', []);
+  const binId = requireBinId('JSONBIN_BIN_ID_MEMBERS');
+  try {
+    const data = await readBin<Member[]>(binId);
+    // PENTING: kalau bin belum pernah ditulis / kepencet ke bentuk lain (mis. "{}"),
+    // JANGAN kembalikan apa adanya — .find()/.filter() di caller akan crash dengan
+    // "members.find is not a function" (ini penyebab member area gagal login).
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
 }
 export async function saveMembers(members: Member[]): Promise<void> {
   await saveCollection('JSONBIN_BIN_ID_MEMBERS', members);
@@ -230,7 +224,13 @@ export async function saveMembers(members: Member[]): Promise<void> {
 // ============================================================
 
 export async function getVouchers(): Promise<Voucher[]> {
-  return getCollection<Voucher[]>('JSONBIN_BIN_ID_VOUCHERS', []);
+  const binId = requireBinId('JSONBIN_BIN_ID_VOUCHERS');
+  try {
+    const data = await readBin<Voucher[]>(binId);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
 }
 export async function saveVouchers(vouchers: Voucher[]): Promise<void> {
   await saveCollection('JSONBIN_BIN_ID_VOUCHERS', vouchers);

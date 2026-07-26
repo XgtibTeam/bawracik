@@ -7,7 +7,7 @@
 // ============================================================
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import type { Transaction, StockRecap, Product, FeedPost, FeedComment } from './types';
+import type { Transaction, StockRecap, Product, PricingConfig } from './types';
 
 let _client: SupabaseClient | null = null;
 
@@ -20,194 +20,6 @@ function getClient(): SupabaseClient {
   }
   _client = createClient(url, key, { auth: { persistSession: false } });
   return _client;
-}
-
-// ---------- Store Logos (multi-logo homepage) ----------
-
-export async function getStoreLogos(): Promise<{ id: string; url: string; urutan: number }[]> {
-  const { data, error } = await getClient().from('store_logos').select('*').order('urutan', { ascending: true });
-  if (error) throw new Error(`Gagal ambil logo: ${error.message}`);
-  return (data ?? []).map((row: any) => ({ id: row.id, url: row.url, urutan: row.urutan }));
-}
-
-export async function addStoreLogo(id: string, url: string, urutan: number): Promise<void> {
-  const { error } = await getClient().from('store_logos').insert({ id, url, urutan });
-  if (error) throw new Error(`Gagal tambah logo: ${error.message}`);
-}
-
-export async function deleteStoreLogo(id: string): Promise<void> {
-  const { error } = await getClient().from('store_logos').delete().eq('id', id);
-  if (error) throw new Error(`Gagal hapus logo: ${error.message}`);
-}
-
-// ---------- Products (katalog) ----------
-
-function rowToProduct(row: any): Product {
-  return {
-    id: row.id,
-    nama: row.nama,
-    deskripsi: row.deskripsi || '',
-    kode: row.kode || undefined,
-    hargaJual: row.harga_jual ?? undefined,
-    imageUrl: row.image_url ?? undefined,
-    isBotol: row.is_botol,
-    ukuranBotolMl: row.ukuran_botol_ml ?? undefined,
-    createdAt: row.created_at,
-  };
-}
-
-export async function getProducts(): Promise<Product[]> {
-  const { data, error } = await getClient().from('products').select('*').order('created_at', { ascending: false });
-  if (error) throw new Error(`Gagal ambil produk: ${error.message}`);
-  return (data ?? []).map(rowToProduct);
-}
-
-export async function insertProduct(p: Product): Promise<void> {
-  const { error } = await getClient().from('products').insert({
-    id: p.id,
-    nama: p.nama,
-    deskripsi: p.deskripsi || '',
-    kode: p.kode ?? null,
-    harga_jual: p.hargaJual ?? null,
-    image_url: p.imageUrl ?? null,
-    is_botol: p.isBotol,
-    ukuran_botol_ml: p.ukuranBotolMl ?? null,
-    created_at: p.createdAt,
-  });
-  if (error) throw new Error(`Gagal tambah produk: ${error.message}`);
-}
-
-export async function bulkInsertProducts(products: Product[]): Promise<void> {
-  if (products.length === 0) return;
-  const { error } = await getClient().from('products').insert(
-    products.map((p) => ({
-      id: p.id,
-      nama: p.nama,
-      deskripsi: p.deskripsi || '',
-      kode: p.kode ?? null,
-      harga_jual: p.hargaJual ?? null,
-      image_url: p.imageUrl ?? null,
-      is_botol: p.isBotol,
-      ukuran_botol_ml: p.ukuranBotolMl ?? null,
-      created_at: p.createdAt,
-    }))
-  );
-  if (error) throw new Error(`Gagal import produk: ${error.message}`);
-}
-
-export async function updateProduct(id: string, patch: Partial<Product>): Promise<void> {
-  const update: Record<string, any> = {};
-  if (patch.nama !== undefined) update.nama = patch.nama;
-  if (patch.deskripsi !== undefined) update.deskripsi = patch.deskripsi;
-  if (patch.kode !== undefined) update.kode = patch.kode;
-  if (patch.hargaJual !== undefined) update.harga_jual = patch.hargaJual;
-  if (patch.imageUrl !== undefined) update.image_url = patch.imageUrl;
-  if (patch.isBotol !== undefined) update.is_botol = patch.isBotol;
-  if (patch.ukuranBotolMl !== undefined) update.ukuran_botol_ml = patch.ukuranBotolMl;
-
-  const { error } = await getClient().from('products').update(update).eq('id', id);
-  if (error) throw new Error(`Gagal ubah produk: ${error.message}`);
-}
-
-export async function deleteProduct(id: string): Promise<void> {
-  const { error } = await getClient().from('products').delete().eq('id', id);
-  if (error) throw new Error(`Gagal hapus produk: ${error.message}`);
-}
-
-// ---------- Feeds Bawracik ----------
-
-export async function getFeedPosts(likerKey?: string): Promise<FeedPost[]> {
-  const { data: posts, error } = await getClient()
-    .from('feed_posts')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) throw new Error(`Gagal ambil feeds: ${error.message}`);
-
-  const { data: likes } = await getClient().from('feed_likes').select('post_id, liker_key');
-  const { data: comments } = await getClient().from('feed_comments').select('post_id');
-
-  return (posts ?? []).map((row: any) => {
-    const postLikes = (likes ?? []).filter((l: any) => l.post_id === row.id);
-    return {
-      id: row.id,
-      caption: row.caption || '',
-      imageUrl: row.image_url,
-      createdBy: row.created_by ?? undefined,
-      createdAt: row.created_at,
-      likeCount: postLikes.length,
-      commentCount: (comments ?? []).filter((c: any) => c.post_id === row.id).length,
-      likedByMe: likerKey ? postLikes.some((l: any) => l.liker_key === likerKey) : false,
-    };
-  });
-}
-
-export async function insertFeedPost(post: {
-  id: string;
-  caption: string;
-  imageUrl: string;
-  createdBy?: string;
-  createdAt: string;
-}): Promise<void> {
-  const { error } = await getClient().from('feed_posts').insert({
-    id: post.id,
-    caption: post.caption,
-    image_url: post.imageUrl,
-    created_by: post.createdBy ?? null,
-    created_at: post.createdAt,
-  });
-  if (error) throw new Error(`Gagal posting feed: ${error.message}`);
-}
-
-export async function deleteFeedPost(id: string): Promise<void> {
-  const { error } = await getClient().from('feed_posts').delete().eq('id', id);
-  if (error) throw new Error(`Gagal hapus feed: ${error.message}`);
-}
-
-export async function toggleFeedLike(postId: string, likerKey: string): Promise<{ liked: boolean }> {
-  const client = getClient();
-  const { data: existing } = await client
-    .from('feed_likes')
-    .select('*')
-    .eq('post_id', postId)
-    .eq('liker_key', likerKey)
-    .maybeSingle();
-
-  if (existing) {
-    const { error } = await client.from('feed_likes').delete().eq('post_id', postId).eq('liker_key', likerKey);
-    if (error) throw new Error(`Gagal batal like: ${error.message}`);
-    return { liked: false };
-  } else {
-    const { error } = await client.from('feed_likes').insert({ post_id: postId, liker_key: likerKey });
-    if (error) throw new Error(`Gagal like: ${error.message}`);
-    return { liked: true };
-  }
-}
-
-export async function getFeedComments(postId: string): Promise<FeedComment[]> {
-  const { data, error } = await getClient()
-    .from('feed_comments')
-    .select('*')
-    .eq('post_id', postId)
-    .order('created_at', { ascending: true });
-  if (error) throw new Error(`Gagal ambil komentar: ${error.message}`);
-  return (data ?? []).map((row: any) => ({
-    id: row.id,
-    postId: row.post_id,
-    nama: row.nama,
-    isi: row.isi,
-    createdAt: row.created_at,
-  }));
-}
-
-export async function insertFeedComment(comment: FeedComment): Promise<void> {
-  const { error } = await getClient().from('feed_comments').insert({
-    id: comment.id,
-    post_id: comment.postId,
-    nama: comment.nama,
-    isi: comment.isi,
-    created_at: comment.createdAt,
-  });
-  if (error) throw new Error(`Gagal kirim komentar: ${error.message}`);
 }
 
 // ---------- Transactions ----------
@@ -304,4 +116,245 @@ export async function getStockRecap(filters: {
     createdBy: row.created_by,
     createdAt: row.created_at,
   }));
+}
+
+// ---------- Products ----------
+// Sama seperti getMembers/saveMembers dari lib/jsonbin.ts dulu: baca semua,
+// mutasi di caller, simpan semua lagi. Dipertahankan biar API routes yang
+// sudah ada (app/api/products/*) tidak perlu diubah logikanya.
+
+export async function getProducts(): Promise<Product[]> {
+  const { data, error } = await getClient()
+    .from('products')
+    .select('*')
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(`Gagal ambil produk: ${error.message}`);
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    nama: row.nama,
+    kode: row.kode,
+    deskripsi: row.deskripsi ?? undefined,
+    hargaJual: row.harga_jual ?? undefined,
+    imageDriveId: row.image_drive_id ?? undefined,
+    kategori: row.kategori ?? undefined,
+    isBotol: row.is_botol,
+    ukuranBotolMl: row.ukuran_botol_ml ?? undefined,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function saveProducts(products: Product[]): Promise<void> {
+  const client = getClient();
+  const rows = products.map((p) => ({
+    id: p.id,
+    nama: p.nama,
+    kode: p.kode,
+    deskripsi: p.deskripsi ?? null,
+    harga_jual: p.hargaJual ?? null,
+    image_drive_id: p.imageDriveId ?? null,
+    kategori: p.kategori ?? null,
+    is_botol: p.isBotol,
+    ukuran_botol_ml: p.ukuranBotolMl ?? null,
+    created_at: p.createdAt,
+  }));
+
+  // Replace-all: hapus semua baris lama lalu insert ulang, supaya konsisten
+  // dengan pola "read-all, mutate, write-all" yang dipakai caller-nya.
+  const { error: delError } = await client.from('products').delete().neq('id', '__none__');
+  if (delError) throw new Error(`Gagal hapus produk lama: ${delError.message}`);
+
+  if (rows.length > 0) {
+    const { error: insError } = await client.from('products').insert(rows);
+    if (insError) throw new Error(`Gagal simpan produk: ${insError.message}`);
+  }
+}
+
+// ---------- Pricing config (1 baris, id=1) ----------
+
+const DEFAULT_PRICING: PricingConfig = {
+  mlTiers: [2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000].map((hargaPerMl) => ({
+    hargaPerMl,
+  })),
+  bottleTiers: [
+    { minMl: 3, maxMl: 35, harga: 5000 }, // botol eceran terkecil
+    { minMl: 36, maxMl: 100, harga: 10000 }, // botol eceran terbesar
+    { minMl: 101, maxMl: 1000, harga: 25000 }, // botol grosir (jerigen dsb), harga default — silakan diedit admin
+  ],
+  updatedAt: new Date(0).toISOString(),
+};
+
+export async function getPricingConfig(): Promise<PricingConfig> {
+  const { data, error } = await getClient().from('pricing_config').select('*').eq('id', 1).maybeSingle();
+  if (error) throw new Error(`Gagal ambil harga: ${error.message}`);
+  if (!data) return DEFAULT_PRICING;
+  return {
+    mlTiers: Array.isArray(data.ml_tiers) ? data.ml_tiers : DEFAULT_PRICING.mlTiers,
+    bottleTiers: Array.isArray(data.bottle_tiers) ? data.bottle_tiers : DEFAULT_PRICING.bottleTiers,
+    updatedAt: data.updated_at ?? DEFAULT_PRICING.updatedAt,
+  };
+}
+
+export async function savePricingConfig(config: PricingConfig): Promise<void> {
+  const { error } = await getClient()
+    .from('pricing_config')
+    .upsert({
+      id: 1,
+      ml_tiers: config.mlTiers,
+      bottle_tiers: config.bottleTiers,
+      updated_at: new Date().toISOString(),
+    });
+  if (error) throw new Error(`Gagal simpan harga: ${error.message}`);
+}
+
+// ---------- Feed member (postingan ala IG) ----------
+
+export type FeedPost = {
+  id: string;
+  memberId: string;
+  memberNama: string;
+  photoDriveId: string;
+  deskripsi: string;
+  cabangId?: string;
+  cabangNama?: string;
+  lokasiAuto?: string;
+  likes: string[];
+  createdAt: string;
+};
+
+export async function getFeedPosts(limit = 50): Promise<FeedPost[]> {
+  const { data, error } = await getClient()
+    .from('feed_posts')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`Gagal ambil feed: ${error.message}`);
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    memberId: row.member_id,
+    memberNama: row.member_nama,
+    photoDriveId: row.photo_drive_id,
+    deskripsi: row.deskripsi ?? '',
+    cabangId: row.cabang_id ?? undefined,
+    cabangNama: row.cabang_nama ?? undefined,
+    lokasiAuto: row.lokasi_auto ?? undefined,
+    likes: Array.isArray(row.likes) ? row.likes : [],
+    createdAt: row.created_at,
+  }));
+}
+
+export async function createFeedPost(post: Omit<FeedPost, 'createdAt' | 'likes'>): Promise<FeedPost> {
+  const row = {
+    id: post.id,
+    member_id: post.memberId,
+    member_nama: post.memberNama,
+    photo_drive_id: post.photoDriveId,
+    deskripsi: post.deskripsi,
+    cabang_id: post.cabangId ?? null,
+    cabang_nama: post.cabangNama ?? null,
+    lokasi_auto: post.lokasiAuto ?? null,
+    likes: [] as string[],
+  };
+  const { data, error } = await getClient().from('feed_posts').insert(row).select().single();
+  if (error) throw new Error(`Gagal buat postingan: ${error.message}`);
+  return {
+    id: data.id,
+    memberId: data.member_id,
+    memberNama: data.member_nama,
+    photoDriveId: data.photo_drive_id,
+    deskripsi: data.deskripsi ?? '',
+    cabangId: data.cabang_id ?? undefined,
+    cabangNama: data.cabang_nama ?? undefined,
+    lokasiAuto: data.lokasi_auto ?? undefined,
+    likes: [],
+    createdAt: data.created_at,
+  };
+}
+
+export async function toggleFeedLike(postId: string, memberId: string): Promise<string[]> {
+  const client = getClient();
+  const { data: existing, error: fetchErr } = await client
+    .from('feed_posts')
+    .select('likes')
+    .eq('id', postId)
+    .maybeSingle();
+  if (fetchErr) throw new Error(`Gagal ambil postingan: ${fetchErr.message}`);
+  if (!existing) throw new Error('Postingan tidak ditemukan');
+
+  const currentLikes: string[] = Array.isArray(existing.likes) ? existing.likes : [];
+  const liked = currentLikes.includes(memberId);
+  const nextLikes = liked ? currentLikes.filter((id) => id !== memberId) : [...currentLikes, memberId];
+
+  const { error: updError } = await client.from('feed_posts').update({ likes: nextLikes }).eq('id', postId);
+  if (updError) throw new Error(`Gagal update like: ${updError.message}`);
+  return nextLikes;
+}
+
+export async function deleteFeedPost(postId: string, memberId: string): Promise<void> {
+  const { error } = await getClient().from('feed_posts').delete().eq('id', postId).eq('member_id', memberId);
+  if (error) throw new Error(`Gagal hapus postingan: ${error.message}`);
+}
+
+// Admin/superadmin bisa hapus feed siapa pun (moderasi), beda dari
+// deleteFeedPost di atas yang cuma boleh hapus postingan miliknya sendiri.
+export async function deleteFeedPostByAdmin(postId: string): Promise<void> {
+  const { error } = await getClient().from('feed_posts').delete().eq('id', postId);
+  if (error) throw new Error(`Gagal hapus postingan: ${error.message}`);
+}
+
+// ---------- Komentar feed (publik, tanpa perlu login) ----------
+
+export type FeedComment = {
+  id: string;
+  postId: string;
+  nama: string;
+  komentar: string;
+  createdAt: string;
+};
+
+export async function getFeedComments(postId: string): Promise<FeedComment[]> {
+  const { data, error } = await getClient()
+    .from('feed_comments')
+    .select('*')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(`Gagal ambil komentar: ${error.message}`);
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    postId: row.post_id,
+    nama: row.nama,
+    komentar: row.komentar,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function createFeedComment(input: { id: string; postId: string; nama: string; komentar: string }): Promise<FeedComment> {
+  const { data, error } = await getClient()
+    .from('feed_comments')
+    .insert({ id: input.id, post_id: input.postId, nama: input.nama, komentar: input.komentar })
+    .select()
+    .single();
+  if (error) throw new Error(`Gagal kirim komentar: ${error.message}`);
+  return {
+    id: data.id,
+    postId: data.post_id,
+    nama: data.nama,
+    komentar: data.komentar,
+    createdAt: data.created_at,
+  };
+}
+
+export async function deleteFeedComment(commentId: string): Promise<void> {
+  const { error } = await getClient().from('feed_comments').delete().eq('id', commentId);
+  if (error) throw new Error(`Gagal hapus komentar: ${error.message}`);
+}
+
+export async function countFeedComments(postIds: string[]): Promise<Record<string, number>> {
+  if (postIds.length === 0) return {};
+  const { data, error } = await getClient().from('feed_comments').select('post_id').in('post_id', postIds);
+  if (error) throw new Error(`Gagal hitung komentar: ${error.message}`);
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    counts[row.post_id] = (counts[row.post_id] || 0) + 1;
+  }
+  return counts;
 }

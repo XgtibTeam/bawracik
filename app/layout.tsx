@@ -1,20 +1,16 @@
 import type { Metadata } from 'next';
-import { Space_Grotesk, IBM_Plex_Sans } from 'next/font/google';
+import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
-import Sidebar from '@/components/Sidebar';
-import { getStoreProfile } from '@/lib/jsonbin';
 
-const display = Space_Grotesk({
+const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
   variable: '--font-display',
-  weight: ['500', '600', '700'],
+  weight: ['400', '500', '600', '700', '800'],
 });
 
-const body = IBM_Plex_Sans({
-  subsets: ['latin'],
-  variable: '--font-body',
-  weight: ['400', '500', '600'],
-});
+// Dipertahankan sbg alias supaya class lama (font-body) tidak perlu diganti satu-satu.
+const display = jakarta;
+const body = jakarta;
 
 export const metadata: Metadata = {
   title: 'Biang Aroma X Me.Racik Parfum',
@@ -29,18 +25,9 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  let waCS: string | undefined;
-  try {
-    const profile = await getStoreProfile();
-    waCS = profile.socialMedia?.whatsapp;
-  } catch {
-    waCS = undefined;
-  }
-
   return (
     <html lang="id">
-      <body className={`${display.variable} ${body.variable} font-body`}>
-        <Sidebar waCS={waCS} />
+      <body className={`${display.variable} ${body.variable} font-body antialiased`}>
         {children}
       </body>
     </html>

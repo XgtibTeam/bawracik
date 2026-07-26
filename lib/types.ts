@@ -53,7 +53,8 @@ export type HomeSection = {
 export type StoreProfile = {
   namaToko: string; // "Biang Aroma X Me.Racik Parfum"
   deskripsi: string;
-  logoUrl: string; // Google Drive file id atau URL
+  logoUrl: string; // Google Drive file id atau URL — logo utama (kompatibilitas lama)
+  logos: string[]; // logo tambahan (bisa lebih dari satu), URL Google Drive
   socialMedia: {
     instagram?: string;
     whatsapp?: string;
@@ -85,22 +86,19 @@ export type BottlePriceTier = {
 export type PricingConfig = {
   mlTiers: MlPriceTier[];
   bottleTiers: BottlePriceTier[];
-  ecerMaxMl: number; // batas ukuran botol maksimal utk transaksi ecer (default 100ml)
-  grosirMaxMl: number; // batas ukuran botol maksimal utk transaksi grosir (default 1000ml)
   updatedAt: string;
 };
 
-// ---------- PRODUK (Supabase table: products) ----------
-// Dipindah dari JSONBin ke Supabase supaya bisa nampung deskripsi & dipakai
-// bareng sistem katalog/cart ala e-commerce.
+// ---------- PRODUK (bin: products) ----------
 
 export type Product = {
   id: string;
   nama: string;
-  deskripsi: string; // ditampilkan saat produk di-tap di katalog
-  kode?: string;
+  kode: string;
+  deskripsi?: string; // ditampilkan di halaman katalog belanja, gaya e-commerce
   hargaJual?: number; // opsional, untuk produk non-parfum-isi-ulang
-  imageUrl?: string; // link publik Google Drive (folder produk)
+  imageDriveId?: string; // Google Drive file id (folder produk)
+  kategori?: string;
   isBotol: boolean;
   ukuranBotolMl?: number; // kalau isBotol true
   createdAt: string;
@@ -145,27 +143,6 @@ export type Voucher = {
   createdAt: string;
 };
 
-// ---------- FEEDS BAWRACIK (Supabase table: feed_posts/feed_likes/feed_comments) ----------
-
-export type FeedPost = {
-  id: string;
-  caption: string;
-  imageUrl: string;
-  createdBy?: string;
-  createdAt: string;
-  likeCount: number;
-  commentCount: number;
-  likedByMe?: boolean;
-};
-
-export type FeedComment = {
-  id: string;
-  postId: string;
-  nama: string;
-  isi: string;
-  createdAt: string;
-};
-
 // ---------- TRANSAKSI (Supabase table: transactions) ----------
 // Disimpan di Supabase (rekap), bukan JSONBin.
 
@@ -174,7 +151,8 @@ export type TransactionItem = {
   namaParfum: string;
   ml: number;
   hargaPerMl: number;
-  subtotal: number;
+  ukuranBotolMl?: number; // botol dipilih untuk item ini spesifik (katalog: tiap produk bisa beda ukuran botol)
+  subtotal: number; // sudah termasuk biaya botol item ini kalau ada
 };
 
 export type Transaction = {

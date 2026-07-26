@@ -52,28 +52,11 @@ function timingSafeEqualStr(a: string, b: string): boolean {
 
 // Payload di-encode base64url supaya field bertipe teks bebas (nama, username)
 // tetap aman dipisah pakai delimiter ":" tanpa bentrok karakter.
-//
-// PENTING: sengaja TIDAK pakai Buffer.from(str).toString('base64url') di sini.
-// middleware.ts jalan di Edge Runtime, dan encoding 'base64url' pada polyfill
-// Buffer di Edge Runtime tidak selalu didukung — kalau gagal, error itu ketelan
-// oleh try/catch di verifySessionToken dan session dianggap tidak valid, padahal
-// token-nya benar. Efeknya: staff/member kelihatan berhasil login (API route jalan
-// di Node.js, cookie kesimpen), tapi begitu pindah halaman, middleware (Edge) gagal
-// membaca session-nya dan langsung redirect balik ke halaman login. Pakai
-// btoa/atob (Web standard) supaya perilakunya identik di Node.js maupun Edge.
 function toBase64Url(str: string): string {
-  const bytes = new TextEncoder().encode(str);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return Buffer.from(str, 'utf-8').toString('base64url');
 }
 function fromBase64Url(str: string): string {
-  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-  while (base64.length % 4 !== 0) base64 += '=';
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
+  return Buffer.from(str, 'base64url').toString('utf-8');
 }
 
 /**

@@ -21,9 +21,11 @@ export function getBottlePrice(ukuranMl: number, config: PricingConfig): number 
 }
 
 export type ChargeableItem = {
+  productId?: string;
   namaParfum: string;
   ml: number;
   hargaPerMl: number;
+  ukuranBotolMl?: number; // botol khusus untuk item ini (dipakai katalog belanja)
 };
 
 export type CheckoutCalc = {
@@ -35,21 +37,37 @@ export type CheckoutCalc = {
 };
 
 /**
- * Hitung total checkout: subtotal semua parfum (ml x harga/ml) + biaya botol
- * (kalau pakai botol, dihitung otomatis dari ukuran botol yang dipilih).
+ * Hitung total checkout: subtotal semua parfum (ml x harga/ml) + biaya botol.
+ * Biaya botol bisa datang dari dua sumber (dan keduanya dijumlahkan kalau
+ * dua-duanya dipakai, walau praktiknya cuma salah satu):
+ *  - `ukuranBotolMl` (parameter lama, satu botol untuk seluruh keranjang —
+ *     dipakai halaman kasir)
+ *  - `item.ukuranBotolMl` per item (katalog belanja: tiap produk beda botol)
  */
 export function hitungCheckout(
   items: ChargeableItem[],
   config: PricingConfig,
   ukuranBotolMl?: number
 ): CheckoutCalc {
-  const itemsWithSubtotal = items.map((it) => ({
-    ...it,
-    subtotal: mlToRupiah(it.ml, it.hargaPerMl),
-  }));
+  const itemsWithSubtotal = items.map((it) => {
+    const subtotalParfumItem = mlToRupiah(it.ml, it.hargaPerMl);
+    const biayaBotolItem = it.ukuranBotolMl ? getBottlePrice(it.ukuranBotolMl, config) : 0;
+    return {
+      ...it,
+      subtotal: subtotalParfumItem + biayaBotolItem,
+    };
+  });
   const totalMl = Math.round(itemsWithSubtotal.reduce((s, it) => s + it.ml, 0) * 10) / 10;
-  const subtotalParfum = itemsWithSubtotal.reduce((s, it) => s + it.subtotal, 0);
-  const biayaBotol = ukuranBotolMl ? getBottlePrice(ukuranBotolMl, config) : 0;
+  const biayaBotolPerItem = items.reduce(
+    (s, it) => s + (it.ukuranBotolMl ? getBottlePrice(it.ukuranBotolMl, config) : 0),
+    0
+  );
+  const biayaBotolGlobal = ukuranBotolMl ? getBottlePrice(ukuranBotolMl, config) : 0;
+  const biayaBotol = biayaBotolPerItem + biayaBotolGlobal;
+  const subtotalParfum = itemsWithSubtotal.reduce(
+    (s, it, i) => s + (it.subtotal - (items[i].ukuranBotolMl ? getBottlePrice(items[i].ukuranBotolMl!, config) : 0)),
+    0
+  );
 
   return {
     items: itemsWithSubtotal,

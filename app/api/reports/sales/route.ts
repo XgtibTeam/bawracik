@@ -27,20 +27,21 @@ export async function GET(req: NextRequest) {
     const totalPendapatan = transactions.reduce((s, t) => s + t.totalHarga, 0);
     const totalTransaksi = transactions.length;
 
-    // Best-seller: ranking berdasarkan JUMLAH ORDER (bukan cuma total ml),
-    // sesuai permintaan — tiap item dalam transaksi dihitung 1 order.
-    const bestSellerMap = new Map<string, { orderCount: number; ml: number }>();
+    // Best-seller: hitung ml per nama parfum SEKALIGUS jumlah order (berapa
+    // kali item ini muncul di transaksi) — admin minta "terbanyak order",
+    // bukan cuma volume ml.
+    const bestSellerMap = new Map<string, { ml: number; jumlahOrder: number }>();
     for (const t of transactions) {
       for (const item of t.items) {
-        const cur = bestSellerMap.get(item.namaParfum) || { orderCount: 0, ml: 0 };
-        cur.orderCount += 1;
+        const cur = bestSellerMap.get(item.namaParfum) || { ml: 0, jumlahOrder: 0 };
         cur.ml += item.ml;
+        cur.jumlahOrder += 1;
         bestSellerMap.set(item.namaParfum, cur);
       }
     }
     const bestSeller = Array.from(bestSellerMap.entries())
-      .map(([nama, v]) => ({ nama, orderCount: v.orderCount, ml: Math.round(v.ml * 10) / 10 }))
-      .sort((a, b) => b.orderCount - a.orderCount)
+      .map(([nama, v]) => ({ nama, ml: v.ml, jumlahOrder: v.jumlahOrder }))
+      .sort((a, b) => b.jumlahOrder - a.jumlahOrder)
       .slice(0, 10);
 
     // Rekap per karyawan (kalau admin/superadmin lihat semua karyawan di cabangnya)

@@ -25,8 +25,6 @@ const STAFF_PROTECTED_API: { prefix: string; methods: string[]; roles: Role[] }[
   { prefix: '/api/store-profile', methods: ['POST', 'PUT'], roles: ['superadmin', 'admin'] },
   { prefix: '/api/upload', methods: ['POST'], roles: ['superadmin', 'admin'] },
   { prefix: '/api/auth/change-password', methods: ['POST'], roles: ['superadmin', 'admin', 'kasir'] },
-  { prefix: '/api/feeds', methods: ['POST', 'DELETE'], roles: ['superadmin', 'admin', 'kasir'] },
-  { prefix: '/api/store-logos', methods: ['POST', 'DELETE'], roles: ['superadmin', 'admin'] },
 ];
 
 export async function middleware(req: NextRequest) {
@@ -76,7 +74,5 @@ export const config = {
     '/api/store-profile/:path*',
     '/api/upload/:path*',
     '/api/auth/change-password/:path*',
-    '/api/feeds/:path*',
-    '/api/store-logos/:path*',
   ],
 };

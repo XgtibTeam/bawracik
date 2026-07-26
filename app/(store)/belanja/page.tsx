@@ -1,41 +1,59 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { driveImageUrl } from '@/lib/drive-url';
 
 type Branch = { id: string; nama: string; alamat?: string };
-type Product = { id: string; nama: string; deskripsi: string; hargaJual?: number; imageUrl?: string };
+type Product = {
+  id: string;
+  nama: string;
+  kode: string;
+  deskripsi?: string;
+  hargaJual?: number;
+  imageDriveId?: string;
+  kategori?: string;
+  isBotol: boolean;
+};
 type PricingConfig = {
   mlTiers: { hargaPerMl: number }[];
   bottleTiers: { minMl: number; maxMl: number; harga: number }[];
-  ecerMaxMl: number;
-  grosirMaxMl: number;
 };
 type StoreProfile = {
   namaToko: string;
   pembayaran: { qrisImageUrl?: string; dana?: string; seabank?: string };
 };
-type CartItem = { namaParfum: string; ml: number; hargaPerMl: number };
+type CartItem = {
+  productId?: string;
+  namaParfum: string;
+  ml: number;
+  hargaPerMl: number;
+  pakaiBotol: boolean;
+  ukuranBotolMl?: number;
+  qty: number;
+};
+
+const ML_CHIPS = [3, 5, 10, 15, 20, 25, 35, 50, 75, 100, 250, 500, 1000];
 
 export default function BelanjaPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [pricing, setPricing] = useState<PricingConfig | null>(null);
   const [profile, setProfile] = useState<StoreProfile | null>(null);
+  const [loadingCatalog, setLoadingCatalog] = useState(true);
 
   const [cabangId, setCabangId] = useState('');
   const [tipe, setTipe] = useState<'ecer' | 'grosir'>('ecer');
-
-  const [hargaPerMl, setHargaPerMl] = useState(2000);
-  const [inputMode, setInputMode] = useState<'rupiah' | 'ml'>('rupiah');
-  const [inputValue, setInputValue] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
 
-  const [pakaiBotol, setPakaiBotol] = useState(false);
-  const [ukuranBotolMl, setUkuranBotolMl] = useState(5);
+  // ----- Modal detail produk (katalog gaya e-commerce) -----
+  const [detailProduct, setDetailProduct] = useState<Product | null>(null);
+  const [pilihMl, setPilihMl] = useState(5);
+  const [pilihHargaPerMl, setPilihHargaPerMl] = useState(0);
+  const [pilihPakaiBotol, setPilihPakaiBotol] = useState(true);
+  const [pilihQty, setPilihQty] = useState(1);
 
   const [waMember, setWaMember] = useState('');
   const [namaMember, setNamaMember] = useState('');
-  const [detailProduct, setDetailProduct] = useState<Product | null>(null);
 
   const [voucherInput, setVoucherInput] = useState('');
   const [voucherChecking, setVoucherChecking] = useState(false);
@@ -51,30 +69,75 @@ export default function BelanjaPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   useEffect(() => {
-    fetch('/api/branches').then((r) => r.json()).then((d) => setBranches(d.branches || []));
-    fetch('/api/products').then((r) => r.json()).then((d) => setProducts(d.products || []));
-    fetch('/api/pricing').then((r) => r.json()).then((d) => setPricing(d.config));
-    fetch('/api/store-profile').then((r) => r.json()).then((d) => setProfile(d.profile));
+    Promise.all([
+      fetch('/api/branches').then((r) => r.json()).then((d) => setBranches(d.branches || [])),
+      fetch('/api/products').then((r) => r.json()).then((d) => setProducts(d.products || [])),
+      fetch('/api/pricing').then((r) => r.json()).then((d) => {
+        setPricing(d.config);
+        const tiers = Array.isArray(d.config?.mlTiers) ? d.config.mlTiers : [];
+        if (tiers.length > 0) setPilihHargaPerMl(tiers[0].hargaPerMl);
+      }),
+      fetch('/api/store-profile').then((r) => r.json()).then((d) => setProfile(d.profile)),
+    ]).finally(() => setLoadingCatalog(false));
   }, []);
 
-  const botolMax = tipe === 'ecer' ? pricing?.ecerMaxMl ?? 100 : pricing?.grosirMaxMl ?? 1000;
+  const bottleTiers = Array.isArray(pricing?.bottleTiers) ? pricing!.bottleTiers : [];
+  const mlTiers = Array.isArray(pricing?.mlTiers) ? pricing!.mlTiers : [];
+  const maxBotolMl = bottleTiers.length > 0 ? Math.max(...bottleTiers.map((t) => t.maxMl)) : 1000;
+  const chipOptions = ML_CHIPS.filter((ml) => ml <= maxBotolMl);
 
-  useEffect(() => {
-    if (ukuranBotolMl > botolMax) setUkuranBotolMl(botolMax);
-  }, [tipe, botolMax]);
+  function hargaBotolUntuk(ml: number): number {
+    return bottleTiers.find((t) => ml >= t.minMl && ml <= t.maxMl)?.harga ?? 0;
+  }
 
-  const mlFromInput =
-    inputMode === 'rupiah'
-      ? Math.round(((Number(inputValue) || 0) / hargaPerMl) * 10) / 10
-      : Number(inputValue) || 0;
+  function bukaDetail(p: Product) {
+    setDetailProduct(p);
+    setPilihMl(chipOptions[0] ?? 5);
+    setPilihPakaiBotol(true);
+    setPilihQty(1);
+    if (mlTiers.length > 0) setPilihHargaPerMl(mlTiers[0].hargaPerMl);
+  }
 
-  const biayaBotol =
-    pakaiBotol && pricing
-      ? pricing.bottleTiers.find((t) => ukuranBotolMl >= t.minMl && ukuranBotolMl <= t.maxMl)?.harga ?? 0
-      : 0;
-  const subtotalParfum = cart.reduce((s, it) => s + Math.round(it.ml * it.hargaPerMl), 0);
-  const totalMl = Math.round(cart.reduce((s, it) => s + it.ml, 0) * 10) / 10;
-  const totalHarga = subtotalParfum + biayaBotol;
+  function tambahDariModal() {
+    if (!detailProduct) return;
+    if (detailProduct.isBotol) {
+      setCart((c) => [
+        ...c,
+        {
+          productId: detailProduct.id,
+          namaParfum: detailProduct.nama,
+          ml: pilihMl,
+          hargaPerMl: pilihHargaPerMl,
+          pakaiBotol: pilihPakaiBotol,
+          ukuranBotolMl: pilihPakaiBotol ? pilihMl : undefined,
+          qty: pilihQty,
+        },
+      ]);
+    } else {
+      setCart((c) => [
+        ...c,
+        {
+          productId: detailProduct.id,
+          namaParfum: detailProduct.nama,
+          ml: 0,
+          hargaPerMl: 0,
+          pakaiBotol: false,
+          qty: pilihQty,
+        },
+      ]);
+    }
+    setDetailProduct(null);
+  }
+
+  function subtotalItem(it: CartItem): number {
+    const flat = it.ml === 0 ? (products.find((p) => p.id === it.productId)?.hargaJual ?? 0) : 0;
+    const parfum = Math.round(it.ml * it.hargaPerMl);
+    const botol = it.ukuranBotolMl ? hargaBotolUntuk(it.ukuranBotolMl) : 0;
+    return (flat + parfum + botol) * it.qty;
+  }
+
+  const totalMl = Math.round(cart.reduce((s, it) => s + it.ml * it.qty, 0) * 10) / 10;
+  const totalHarga = cart.reduce((s, it) => s + subtotalItem(it), 0);
   const diskon = voucherApplied
     ? voucherApplied.tipe === 'persen'
       ? Math.round((totalHarga * voucherApplied.nilai) / 100)
@@ -114,19 +177,31 @@ export default function BelanjaPage() {
     setVoucherMsg(null);
   }
 
-  function addToCart() {
-    if (!detailProduct || mlFromInput <= 0) return;
-    setCart((c) => [...c, { namaParfum: detailProduct.nama, ml: mlFromInput, hargaPerMl }]);
-    setInputValue('');
-    setDetailProduct(null);
-  }
-
   function handleBuktiUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => setBuktiPreview(reader.result as string);
     reader.readAsDataURL(file);
+  }
+
+  // Perluas tiap item keranjang (qty > 1) jadi baris-baris terpisah untuk API,
+  // supaya biaya botol dihitung per-botol (bukan cuma per baris keranjang).
+  function expandItemsForApi() {
+    const rows: { productId?: string; namaParfum: string; ml: number; hargaPerMl: number; ukuranBotolMl?: number }[] = [];
+    for (const it of cart) {
+      const flatHarga = it.ml === 0 ? (products.find((p) => p.id === it.productId)?.hargaJual ?? 0) : it.hargaPerMl;
+      for (let i = 0; i < it.qty; i++) {
+        rows.push({
+          productId: it.productId,
+          namaParfum: it.namaParfum,
+          ml: it.ml === 0 ? 1 : it.ml, // produk flat dihitung sbg 1 "unit" biar subtotal = harga
+          hargaPerMl: it.ml === 0 ? flatHarga : it.hargaPerMl,
+          ukuranBotolMl: it.ukuranBotolMl,
+        });
+      }
+    }
+    return rows;
   }
 
   async function handleCheckout() {
@@ -142,8 +217,7 @@ export default function BelanjaPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cabangId,
-          items: cart,
-          ukuranBotolMl: pakaiBotol ? ukuranBotolMl : undefined,
+          items: expandItemsForApi(),
           tipe,
           member: tipe === 'ecer' ? { wa: waMember.trim(), nama: namaMember.trim() } : undefined,
           voucherCode: voucherApplied?.code || undefined,
@@ -212,7 +286,7 @@ export default function BelanjaPage() {
   }
 
   return (
-    <main className="mx-auto max-w-md px-4 py-6 pb-16">
+    <main className="mx-auto max-w-md px-4 py-6 pb-24">
       <h1 className="font-display text-2xl font-semibold text-ink">Belanja</h1>
 
       {/* Step indicator */}
@@ -227,14 +301,14 @@ export default function BelanjaPage() {
               {s}
             </div>
             <span className={`text-xs ${step >= s ? 'text-ink' : 'text-ink/40'}`}>
-              {s === 1 ? 'Pesanan' : s === 2 ? 'Ringkasan' : 'Data & Bayar'}
+              {s === 1 ? 'Katalog' : s === 2 ? 'Ringkasan' : 'Data & Bayar'}
             </span>
             {s < 3 && <div className="h-px flex-1 bg-ink/10" />}
           </div>
         ))}
       </div>
 
-      {/* ===== STEP 1: Cabang, katalog, isi pesanan ===== */}
+      {/* ===== STEP 1: Cabang + Katalog ===== */}
       {step === 1 && (
         <>
           <div className="ticket mt-4 space-y-3 p-4">
@@ -268,153 +342,67 @@ export default function BelanjaPage() {
             </div>
           </div>
 
-          <div className="ticket mt-4 p-4">
-            <h2 className="font-display text-sm font-semibold text-ink">Katalog Parfum</h2>
-            {products.length === 0 && (
-              <p className="mt-2 text-xs text-warn">Belum ada produk tersedia saat ini.</p>
-            )}
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {products.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    setDetailProduct(p);
-                    setInputValue('');
-                  }}
-                  className="flex items-center gap-2 rounded-lg border border-ink/10 p-2 text-left text-xs hover:border-accent"
-                >
-                  {p.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.imageUrl} alt={p.nama} className="h-9 w-9 rounded object-cover" />
-                  ) : (
-                    <div className="flex h-9 w-9 items-center justify-center rounded bg-paper text-[10px] text-ink/40">
-                      N/A
-                    </div>
-                  )}
-                  <span>{p.nama}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {detailProduct && (
-            <div
-              className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
-              onClick={() => setDetailProduct(null)}
-            >
-              <div className="ticket w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
-                {detailProduct.imageUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={detailProduct.imageUrl}
-                    alt={detailProduct.nama}
-                    className="mb-3 h-36 w-full rounded-lg object-cover"
-                  />
-                )}
-                <h3 className="font-display text-lg font-semibold text-ink">{detailProduct.nama}</h3>
-                {detailProduct.deskripsi && (
-                  <p className="mt-1 text-sm text-ink/60">{detailProduct.deskripsi}</p>
-                )}
-                {detailProduct.hargaJual && (
-                  <p className="mt-1 text-sm text-ink/60">
-                    Harga jual: Rp{detailProduct.hargaJual.toLocaleString('id-ID')}
-                  </p>
-                )}
-
-                <div className="mt-3 space-y-2">
-                  <select
-                    value={hargaPerMl}
-                    onChange={(e) => setHargaPerMl(Number(e.target.value))}
-                    className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-                  >
-                    {(pricing?.mlTiers ?? []).map((t) => (
-                      <option key={t.hargaPerMl} value={t.hargaPerMl}>
-                        Rp{t.hargaPerMl.toLocaleString('id-ID')} / ml
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex gap-2">
+          <div className="mt-4">
+            <h2 className="font-display text-sm font-semibold text-ink">Katalog Produk</h2>
+            {loadingCatalog ? (
+              <p className="mt-3 text-sm text-ink/50">Memuat katalog...</p>
+            ) : products.length === 0 ? (
+              <p className="mt-3 text-sm text-ink/50">Belum ada produk di katalog.</p>
+            ) : (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {products.map((p) => {
+                  const img = driveImageUrl(p.imageDriveId);
+                  return (
                     <button
-                      onClick={() => setInputMode('rupiah')}
-                      className={`flex-1 rounded-lg py-1.5 text-xs font-semibold ${
-                        inputMode === 'rupiah' ? 'bg-accentSoft text-accent' : 'bg-paper text-ink/50'
-                      }`}
+                      key={p.id}
+                      onClick={() => bukaDetail(p)}
+                      className="ticket flex flex-col overflow-hidden p-0 text-left transition hover:-translate-y-0.5"
                     >
-                      Input Rupiah
+                      <div className="aspect-square w-full bg-paper">
+                        {img ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={img} alt={p.nama} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-2xl">🧴</div>
+                        )}
+                      </div>
+                      <div className="p-2.5">
+                        <p className="line-clamp-1 text-sm font-semibold text-ink">{p.nama}</p>
+                        <p className="mt-0.5 line-clamp-2 text-xs text-ink/50">
+                          {p.deskripsi || (p.isBotol ? 'Parfum isi ulang' : 'Produk')}
+                        </p>
+                        <p className="mt-1.5 text-xs font-semibold text-accent">
+                          {p.isBotol
+                            ? `mulai Rp${(mlTiers[0]?.hargaPerMl ?? 0).toLocaleString('id-ID')}/ml`
+                            : `Rp${(p.hargaJual ?? 0).toLocaleString('id-ID')}`}
+                        </p>
+                      </div>
                     </button>
-                    <button
-                      onClick={() => setInputMode('ml')}
-                      className={`flex-1 rounded-lg py-1.5 text-xs font-semibold ${
-                        inputMode === 'ml' ? 'bg-accentSoft text-accent' : 'bg-paper text-ink/50'
-                      }`}
-                    >
-                      Input Ml
-                    </button>
-                  </div>
-                  <input
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    type="number"
-                    placeholder={inputMode === 'rupiah' ? 'Nominal (mis. 20000)' : 'Jumlah ml'}
-                    className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-                  />
-                  <p className="text-xs text-ink/50">≈ {mlFromInput} ml</p>
-                </div>
-
-                <button
-                  onClick={addToCart}
-                  disabled={mlFromInput <= 0}
-                  className="mt-4 w-full rounded-card bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-                >
-                  Checkout ke Keranjang
-                </button>
-                <button
-                  onClick={() => setDetailProduct(null)}
-                  className="mt-2 w-full rounded-card border border-ink/15 px-4 py-2.5 text-sm font-semibold text-ink hover:bg-paper"
-                >
-                  Tutup
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="ticket mt-4 space-y-2 p-4">
-            <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-              <input type="checkbox" checked={pakaiBotol} onChange={(e) => setPakaiBotol(e.target.checked)} />
-              Pakai Botol
-            </label>
-            {pakaiBotol && (
-              <div>
-                <input
-                  type="number"
-                  value={ukuranBotolMl}
-                  min={3}
-                  max={botolMax}
-                  onChange={(e) =>
-                    setUkuranBotolMl(Math.min(botolMax, Math.max(0, Number(e.target.value))))
-                  }
-                  placeholder="Ukuran botol (ml)"
-                  className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-                />
-                <p className="mt-1 text-xs text-ink/50">
-                  Maks {botolMax}ml untuk {tipe} · Biaya botol: Rp{biayaBotol.toLocaleString('id-ID')}
-                </p>
+                  );
+                })}
               </div>
             )}
           </div>
 
           {cart.length > 0 && (
             <div className="ticket mt-4 p-4">
-              <h2 className="font-display text-sm font-semibold text-ink">Keranjang ({cart.length})</h2>
+              <h2 className="font-display text-sm font-semibold text-ink">
+                Keranjang ({cart.reduce((s, it) => s + it.qty, 0)})
+              </h2>
               <ul className="mt-2 divide-y divide-ink/10 text-sm">
                 {cart.map((it, i) => (
-                  <li key={i} className="flex justify-between py-2">
+                  <li key={i} className="flex items-center justify-between gap-2 py-2">
                     <span>
-                      {it.namaParfum} — {it.ml}ml
+                      {it.namaParfum}
+                      {it.ml > 0 ? ` — ${it.ml}ml${it.pakaiBotol ? ' + botol' : ''}` : ''}
+                      {it.qty > 1 ? ` ×${it.qty}` : ''}
                     </span>
-                    <button onClick={() => setCart((c) => c.filter((_, idx) => idx !== i))} className="text-xs text-danger">
-                      Hapus
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-ink/60">Rp{subtotalItem(it).toLocaleString('id-ID')}</span>
+                      <button onClick={() => setCart((c) => c.filter((_, idx) => idx !== i))} className="text-xs text-danger">
+                        Hapus
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -431,18 +419,14 @@ export default function BelanjaPage() {
             <ul className="mt-2 divide-y divide-ink/10 text-sm">
               {cart.map((it, i) => (
                 <li key={i} className="flex justify-between py-2">
-                  <span>{it.namaParfum}</span>
                   <span>
-                    {it.ml}ml — Rp{Math.round(it.ml * it.hargaPerMl).toLocaleString('id-ID')}
+                    {it.namaParfum}
+                    {it.ml > 0 ? ` (${it.ml}ml${it.pakaiBotol ? ' + botol' : ''})` : ''}
+                    {it.qty > 1 ? ` ×${it.qty}` : ''}
                   </span>
+                  <span>Rp{subtotalItem(it).toLocaleString('id-ID')}</span>
                 </li>
               ))}
-              {pakaiBotol && (
-                <li className="flex justify-between py-2">
-                  <span>Botol {ukuranBotolMl}ml</span>
-                  <span>Rp{biayaBotol.toLocaleString('id-ID')}</span>
-                </li>
-              )}
             </ul>
             <div className="mt-2 flex justify-between border-t border-ink/10 pt-2 text-sm font-semibold">
               <span>Total ({totalMl}ml)</span>
@@ -549,6 +533,124 @@ export default function BelanjaPage() {
           </button>
         )}
       </div>
+
+      {/* ===== Modal detail produk (gaya e-commerce) ===== */}
+      {detailProduct && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
+          onClick={() => setDetailProduct(null)}
+        >
+          <div
+            className="ticket max-h-[90vh] w-full max-w-sm overflow-y-auto p-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="aspect-[4/3] w-full bg-paper">
+              {driveImageUrl(detailProduct.imageDriveId) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={driveImageUrl(detailProduct.imageDriveId)}
+                  alt={detailProduct.nama}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-4xl">🧴</div>
+              )}
+            </div>
+
+            <div className="p-5">
+              <h3 className="font-display text-lg font-semibold text-ink">{detailProduct.nama}</h3>
+              {detailProduct.deskripsi && (
+                <p className="mt-1.5 text-sm leading-relaxed text-ink/60">{detailProduct.deskripsi}</p>
+              )}
+
+              {detailProduct.isBotol ? (
+                <>
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-ink/50">Pilih Ukuran</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {chipOptions.map((ml) => (
+                      <button
+                        key={ml}
+                        onClick={() => setPilihMl(ml)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                          pilihMl === ml ? 'bg-accent text-white' : 'bg-paper text-ink/60'
+                        }`}
+                      >
+                        {ml}ml
+                      </button>
+                    ))}
+                  </div>
+
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-ink/50">Harga per Ml</p>
+                  <select
+                    value={pilihHargaPerMl}
+                    onChange={(e) => setPilihHargaPerMl(Number(e.target.value))}
+                    className="mt-2 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+                  >
+                    {mlTiers.map((t) => (
+                      <option key={t.hargaPerMl} value={t.hargaPerMl}>
+                        Rp{t.hargaPerMl.toLocaleString('id-ID')} / ml
+                      </option>
+                    ))}
+                  </select>
+
+                  <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-ink">
+                    <input
+                      type="checkbox"
+                      checked={pilihPakaiBotol}
+                      onChange={(e) => setPilihPakaiBotol(e.target.checked)}
+                    />
+                    Pakai Botol (+Rp{hargaBotolUntuk(pilihMl).toLocaleString('id-ID')})
+                  </label>
+                </>
+              ) : (
+                <p className="mt-3 text-sm font-semibold text-accent">
+                  Rp{(detailProduct.hargaJual ?? 0).toLocaleString('id-ID')}
+                </p>
+              )}
+
+              <div className="mt-4 flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">Jumlah</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setPilihQty((q) => Math.max(1, q - 1))}
+                    className="h-8 w-8 rounded-full bg-paper text-ink"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center text-sm font-semibold">{pilihQty}</span>
+                  <button onClick={() => setPilihQty((q) => q + 1)} className="h-8 w-8 rounded-full bg-paper text-ink">
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={tambahDariModal}
+                className="mt-5 w-full rounded-card bg-accent px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
+              >
+                Tambah ke Keranjang
+              </button>
+              <button
+                onClick={() => setDetailProduct(null)}
+                className="mt-2 w-full rounded-card border border-ink/15 px-4 py-2.5 text-sm font-semibold text-ink hover:bg-paper"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tombol keranjang mengambang saat ada isi & masih di step 1 */}
+      {step === 1 && cart.length > 0 && (
+        <button
+          onClick={() => setStep(2)}
+          disabled={!cabangId}
+          className="fixed bottom-20 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-card bg-ink px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50"
+        >
+          Lihat Keranjang ({cart.reduce((s, it) => s + it.qty, 0)}) — Rp{totalHarga.toLocaleString('id-ID')}
+        </button>
+      )}
     </main>
   );
 }

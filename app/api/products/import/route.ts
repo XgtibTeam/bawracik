@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { getProducts, bulkInsertProducts } from '@/lib/supabase';
+import { getProducts, saveProducts } from '@/lib/supabase';
 
-// Body: { rows: [{ nama, deskripsi, kode?, hargaJual?, imageUrl?, ukuranBotolMl? }] }
-// Klien parse file Excel/CSV pakai SheetJS dulu (kolom: Nama Parfum, Deskripsi
-// Produk, dan opsional Kode/Harga jual/link gambar/Ukuran Botol) lalu kirim JSON
-// ke sini.
+// Body: { rows: [{ nama, kode?, deskripsi?, hargaJual?, imageUrl?, isBotol?, ukuranBotolMl? }] }
+// Klien parse file Excel/CSV pakai SheetJS dulu (kolom minimal: Nama Produk,
+// Deskripsi — kolom lain opsional) lalu kirim JSON ke sini. Kode produk
+// dibuat otomatis dari nama kalau tidak diisi di file.
+function slugKode(nama: string, i: number): string {
+  const slug = nama
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 20);
+  return `${slug || 'produk'}-${Date.now().toString(36)}${i}`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -14,52 +23,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Data import kosong' }, { status: 400 });
     }
 
-    const existing = await getProducts();
-    const existingNama = new Set(existing.map((p) => p.nama.toLowerCase()));
+    const products = await getProducts();
+    const existingKode = new Set(products.map((p) => p.kode.toLowerCase()));
 
     const errors: string[] = [];
-    const added: Awaited<ReturnType<typeof getProducts>> = [];
+    const added: typeof products = [];
 
     for (const [i, row] of rows.entries()) {
-      const nama = (row?.nama || row?.['Nama Parfum'] || row?.['nama parfum'] || '').toString().trim();
+      const nama = (row?.nama || row?.['Nama Produk'] || row?.['Nama Parfum'] || '').toString().trim();
+      let kode = (row?.kode || row?.['Kode'] || '').toString().trim();
+      const deskripsi = (row?.deskripsi || row?.['Deskripsi'] || row?.['Deskripsi Produk'] || '').toString().trim();
       if (!nama) {
         errors.push(`Baris ${i + 1}: nama kosong, dilewati`);
         continue;
       }
-      if (existingNama.has(nama.toLowerCase())) {
-        errors.push(`Baris ${i + 1}: produk "${nama}" sudah ada, dilewati`);
+      if (!kode) kode = slugKode(nama, i);
+      if (existingKode.has(kode.toLowerCase())) {
+        errors.push(`Baris ${i + 1}: kode "${kode}" sudah ada, dilewati`);
         continue;
       }
 
-      const deskripsi = (
-        row?.deskripsi ||
-        row?.['Deskripsi Produk'] ||
-        row?.['Deskripsi'] ||
-        row?.['deskripsi produk'] ||
-        ''
-      )
-        .toString()
-        .trim();
-      const kode = row?.kode || row?.['Kode'];
       const hargaJualRaw = row?.hargaJual ?? row?.['Harga jual'] ?? row?.['Harga Jual'];
       const imageUrl = row?.imageUrl ?? row?.['link gambar'] ?? row?.['Link Gambar'];
       const ukuranBotolRaw = row?.ukuranBotolMl ?? row?.['Ukuran Botol'];
 
-      added.push({
+      const product = {
         id: randomUUID(),
         nama,
-        deskripsi,
-        kode: kode ? String(kode).trim() : undefined,
+        kode,
+        deskripsi: deskripsi || undefined,
         hargaJual: hargaJualRaw ? Number(hargaJualRaw) : undefined,
-        imageUrl: imageUrl || undefined,
-        isBotol: Boolean(ukuranBotolRaw),
+        imageDriveId: imageUrl || undefined,
+        isBotol: ukuranBotolRaw ? true : !hargaJualRaw, // default: kalau tidak ada harga jual flat, anggap parfum isi ulang
         ukuranBotolMl: ukuranBotolRaw ? Number(ukuranBotolRaw) : undefined,
         createdAt: new Date().toISOString(),
-      });
-      existingNama.add(nama.toLowerCase());
+      };
+      added.push(product);
+      existingKode.add(kode.toLowerCase());
     }
 
-    await bulkInsertProducts(added);
+    const updated = [...products, ...added];
+    await saveProducts(updated);
 
     return NextResponse.json({ imported: added.length, skipped: errors.length, errors });
   } catch (err: any) {

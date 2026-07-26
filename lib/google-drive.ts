@@ -26,11 +26,11 @@ function getEnv(name: string): string {
   return value;
 }
 
-export type DriveFolder = 'attendance' | 'products' | 'feeds';
+export type DriveFolder = 'attendance' | 'products' | 'feed';
 
 function getFolderId(folder: DriveFolder = 'attendance'): string {
   if (folder === 'products') return getEnv('GOOGLE_DRIVE_FOLDER_ID_PRODUCTS');
-  if (folder === 'feeds') return getEnv('GOOGLE_DRIVE_FOLDER_ID_FEEDS');
+  if (folder === 'feed') return getEnv('GOOGLE_DRIVE_FOLDER_ID_FEED');
   return getEnv('GOOGLE_DRIVE_FOLDER_ID');
 }
 

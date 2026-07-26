@@ -1,52 +1,5 @@
 -- Jalankan file ini di Supabase SQL Editor sebelum pakai lib/supabase.ts
--- HANYA untuk REKAP/TRANSAKSI + KATALOG PRODUK (nama, deskripsi, gambar).
--- Data teks lain (profil toko, cabang, member, voucher) tetap di JSONBin.
-
-create table if not exists products (
-  id text primary key,
-  nama text not null,
-  deskripsi text default '',
-  kode text,
-  harga_jual numeric,
-  image_url text,
-  is_botol boolean not null default false,
-  ukuran_botol_ml numeric,
-  created_at timestamptz not null default now()
-);
-create index if not exists idx_products_nama on products (nama);
-
-create table if not exists feed_posts (
-  id text primary key,
-  caption text default '',
-  image_url text not null,
-  created_by text,               -- username admin/kasir yang posting
-  created_at timestamptz not null default now()
-);
-
-create table if not exists feed_likes (
-  post_id text not null references feed_posts(id) on delete cascade,
-  liker_key text not null,       -- nomor WA member, atau id anonim device
-  created_at timestamptz not null default now(),
-  primary key (post_id, liker_key)
-);
-
-create table if not exists feed_comments (
-  id text primary key,
-  post_id text not null references feed_posts(id) on delete cascade,
-  nama text not null,
-  isi text not null,
-  created_at timestamptz not null default now()
-);
-
-create index if not exists idx_feed_likes_post on feed_likes (post_id);
-create index if not exists idx_feed_comments_post on feed_comments (post_id);
-
-create table if not exists store_logos (
-  id text primary key,
-  url text not null,
-  urutan integer not null default 0,
-  created_at timestamptz not null default now()
-);
+-- Hanya untuk REKAP/TRANSAKSI. Data teks (produk, member, dll) tetap di JSONBin.
 
 create table if not exists transactions (
   id text primary key,
@@ -83,12 +36,85 @@ create table if not exists stock_recap (
 create index if not exists idx_stock_recap_cabang on stock_recap (cabang_id);
 create index if not exists idx_stock_recap_periode on stock_recap (periode, tanggal);
 
+-- ============================================================
+-- PRODUK & HARGA — dipindah dari JSONBin ke Supabase supaya bentuk
+-- datanya selalu terjamin relasional (kolom fix), tidak bisa "berubah
+-- bentuk" jadi object/kosong seperti yang pernah terjadi di JSONBin
+-- dan menyebabkan error "x.find/x.map is not a function" di client.
+-- ============================================================
+
+create table if not exists products (
+  id text primary key,
+  nama text not null,
+  kode text not null unique,
+  harga_jual numeric,
+  image_drive_id text,
+  kategori text,
+  is_botol boolean not null default false,
+  ukuran_botol_ml numeric,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_products_kode on products (lower(kode));
+
+-- Satu baris saja (id selalu 1) menyimpan tier harga per-ml & harga botol.
+create table if not exists pricing_config (
+  id int primary key default 1,
+  ml_tiers jsonb not null default '[]'::jsonb,
+  bottle_tiers jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now(),
+  constraint pricing_config_singleton check (id = 1)
+);
+
+insert into pricing_config (id, ml_tiers, bottle_tiers)
+values (
+  1,
+  '[{"hargaPerMl":2000},{"hargaPerMl":3000},{"hargaPerMl":4000},{"hargaPerMl":5000},{"hargaPerMl":6000},{"hargaPerMl":7000},{"hargaPerMl":8000},{"hargaPerMl":9000},{"hargaPerMl":10000}]'::jsonb,
+  '[{"minMl":3,"maxMl":35,"harga":5000},{"minMl":50,"maxMl":100,"harga":10000}]'::jsonb
+)
+on conflict (id) do nothing;
+
+-- ============================================================
+-- FEED MEMBER — postingan ala IG di Member Area. Foto tetap di Google
+-- Drive (kolom photo_drive_id menyimpan file id-nya), teks & lokasi di sini.
+-- ============================================================
+
+create table if not exists feed_posts (
+  id text primary key,
+  member_id text not null,
+  member_nama text not null,
+  photo_drive_id text not null,
+  deskripsi text not null default '',
+  cabang_id text,              -- diisi jika lokasi dipilih dari daftar cabang
+  cabang_nama text,
+  lokasi_auto text,            -- diisi jika lokasi dari deteksi GPS ("lat,lng" / label hasil reverse-geocode)
+  likes text[] not null default '{}',  -- array member id yang like
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_feed_posts_created_at on feed_posts (created_at desc);
+create index if not exists idx_feed_posts_member on feed_posts (member_id);
+
+-- Komentar feed (fitur baru: feed publik tanpa login, bisa like & komen)
+create table if not exists feed_comments (
+  id text primary key,
+  post_id text not null references feed_posts(id) on delete cascade,
+  nama text not null,            -- nama pengomentar (member atau tamu tanpa login)
+  komentar text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_feed_comments_post on feed_comments (post_id, created_at);
+alter table feed_comments enable row level security;
+
+-- Kolom deskripsi produk untuk katalog belanja (tampilan ala e-commerce)
+alter table products add column if not exists deskripsi text;
+
+-- RLS: matikan akses publik langsung, semua akses lewat server (service key)
+alter table products enable row level security;
+alter table pricing_config enable row level security;
+alter table feed_posts enable row level security;
+
 -- RLS: matikan akses publik langsung, semua akses lewat server (service key)
 alter table transactions enable row level security;
 alter table stock_recap enable row level security;
-alter table products enable row level security;
-alter table store_logos enable row level security;
-alter table feed_posts enable row level security;
-alter table feed_likes enable row level security;
-alter table feed_comments enable row level security;
 -- Tidak ada policy dibuat -> hanya service_role key (dipakai server) yang bisa akses.

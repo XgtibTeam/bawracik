@@ -20,8 +20,10 @@ export async function POST(req: NextRequest) {
       namaToko: body?.namaToko ?? current.namaToko,
       deskripsi: body?.deskripsi ?? current.deskripsi,
       logoUrl: body?.logoUrl ?? current.logoUrl,
+      logos: Array.isArray(body?.logos) ? body.logos : current.logos,
       socialMedia: { ...current.socialMedia, ...(body?.socialMedia ?? {}) },
       pembayaran: { ...current.pembayaran, ...(body?.pembayaran ?? {}) },
+      homeSections: Array.isArray(body?.homeSections) ? body.homeSections : current.homeSections,
     };
     await saveStoreProfile(updated);
     return NextResponse.json({ profile: updated });

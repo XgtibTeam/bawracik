@@ -6,6 +6,8 @@ import {
   AttendanceRecord,
 } from '@/lib/jsonbin';
 import { uploadPhotoToDrive } from '@/lib/google-drive';
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
+import { detectShift } from '@/lib/shift';
 
 const VALID_KETERANGAN = ['Hadir', 'Sakit', 'Izin', 'Lembur', 'Lainnya'];
 
@@ -44,16 +46,23 @@ function sanitizeForFilename(text: string): string {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await verifySessionToken(req.cookies.get(SESSION_COOKIE_NAME)?.value);
+    if (!session || !['superadmin', 'admin', 'kasir'].includes(session.role)) {
+      return NextResponse.json({ error: 'Belum login' }, { status: 401 });
+    }
+
     const body = await req.json();
-    const nama = (body?.nama || '').trim();
+    // Nama SELALU dari session yang sedang login (bukan input bebas dari client),
+    // supaya absensi tidak bisa dipalsukan atas nama orang lain.
+    const nama = session.nama;
     const cabang = (body?.cabang || '').trim();
-    const keterangan = body?.keterangan;
+    const keterangan = body?.keterangan || 'Hadir';
     const keteranganLainnya = (body?.keteranganLainnya || '').trim();
     const photoBase64 = body?.photoBase64;
 
-    if (!nama || !cabang || !keterangan || !photoBase64) {
+    if (!cabang || !photoBase64) {
       return NextResponse.json(
-        { error: 'Nama, cabang, keterangan, dan foto wajib diisi' },
+        { error: 'Cabang dan swafoto wajib diisi' },
         { status: 400 }
       );
     }
@@ -77,6 +86,10 @@ export async function POST(req: NextRequest) {
 
     const { path: fotoPath } = await uploadPhotoToDrive(photoBase64, filename);
 
+    // Shift Pagi (07:00) / Siang (14:00) & status keterlambatan dihitung otomatis
+    // dari jam kedatangan — tidak perlu dipilih manual oleh karyawan.
+    const shiftInfo = detectShift(jam, keterangan);
+
     const record: AttendanceRecord = {
       id,
       nama,
@@ -87,6 +100,9 @@ export async function POST(req: NextRequest) {
       jam,
       timestamp: now.toISOString(),
       fotoPath,
+      shift: shiftInfo.shift,
+      statusKehadiran: shiftInfo.status,
+      telatMenit: shiftInfo.telatMenit,
     };
 
     const records = await getAttendanceRecords();

@@ -5,12 +5,10 @@ import * as XLSX from 'xlsx';
 
 type Branch = { id: string; nama: string; alamat?: string; waCS?: string };
 type Employee = { id: string; nama: string; username: string; role: string; cabangId: string | null };
-type Product = { id: string; nama: string; deskripsi: string; kode?: string; hargaJual?: number; isBotol: boolean; ukuranBotolMl?: number; imageUrl?: string };
+type Product = { id: string; nama: string; kode: string; deskripsi?: string; hargaJual?: number; isBotol: boolean; ukuranBotolMl?: number; imageDriveId?: string };
 type PricingConfig = {
   mlTiers: { hargaPerMl: number }[];
   bottleTiers: { minMl: number; maxMl: number; harga: number }[];
-  ecerMaxMl: number;
-  grosirMaxMl: number;
 };
 type Voucher = { code: string; tipe: string; nilai: number; aktif: boolean };
 type HomeSection = { id: string; type: 'banner' | 'teks' | 'gambar' | 'promo'; judul?: string; isi?: string; gambarUrl?: string };
@@ -18,6 +16,7 @@ type StoreProfile = {
   namaToko: string;
   deskripsi: string;
   logoUrl: string;
+  logos: string[];
   socialMedia: { instagram?: string; whatsapp?: string; tiktok?: string };
   pembayaran: { qrisImageUrl?: string; dana?: string; seabank?: string };
   homeSections: HomeSection[];
@@ -32,7 +31,6 @@ const TABS = [
   { key: 'harga', label: 'Harga' },
   { key: 'voucher', label: 'Voucher' },
   { key: 'stok', label: 'Stok' },
-  { key: 'feeds', label: 'Feeds' },
   { key: 'rekap', label: 'Rekap & Grafik' },
 ] as const;
 
@@ -75,7 +73,6 @@ export default function AdminTokoPage() {
       {tab === 'harga' && <HargaTab />}
       {tab === 'voucher' && <VoucherTab />}
       {tab === 'stok' && <StokTab />}
-      {tab === 'feeds' && <FeedsTab />}
       {tab === 'rekap' && <RekapTab />}
     </main>
   );
@@ -120,7 +117,32 @@ function ProfilTab() {
         />
       </div>
       <ImageUploadField label="Logo Toko (utama)" value={profile.logoUrl} onChange={(v) => setProfile({ ...profile, logoUrl: v })} />
-      <LogoGalleryManager />
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-ink/60">Logo Tambahan (opsional, bisa lebih dari satu)</label>
+        <div className="flex flex-wrap gap-2">
+          {(profile.logos || []).map((url, i) => (
+            <div key={i} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt={`Logo ${i + 1}`} className="h-14 w-14 rounded-lg border border-ink/10 object-contain" />
+              <button
+                onClick={() => setProfile({ ...profile, logos: profile.logos.filter((_, idx) => idx !== i) })}
+                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-[10px] text-white"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2">
+          <ImageUploadField
+            label="Tambah Logo Baru"
+            value=""
+            onChange={(v) => v && setProfile({ ...profile, logos: [...(profile.logos || []), v] })}
+          />
+        </div>
+      </div>
+
       <Field
         label="Instagram (username)"
         value={profile.socialMedia.instagram || ''}
@@ -299,12 +321,10 @@ function ImageUploadField({
   label,
   value,
   onChange,
-  folder = 'products',
 }: {
   label: string;
   value: string;
   onChange: (url: string) => void;
-  folder?: 'products' | 'feeds';
 }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -328,7 +348,7 @@ function ImageUploadField({
       const res = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64, filename: file.name, folder }),
+        body: JSON.stringify({ imageBase64, filename: file.name }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload gagal');
@@ -360,63 +380,6 @@ function ImageUploadField({
         placeholder="atau tempel link gambar manual"
         className="mt-2 w-full rounded-lg border border-ink/15 px-3 py-2 text-xs outline-none focus:border-accent"
       />
-    </div>
-  );
-}
-
-function LogoGalleryManager() {
-  const [logos, setLogos] = useState<{ id: string; url: string }[]>([]);
-  const [newUrl, setNewUrl] = useState('');
-
-  function load() {
-    fetch('/api/store-logos').then((r) => r.json()).then((d) => setLogos(d.logos || []));
-  }
-  useEffect(load, []);
-
-  async function addLogo(url: string) {
-    if (!url) return;
-    const res = await fetch('/api/store-logos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    });
-    if (res.ok) {
-      setNewUrl('');
-      load();
-    }
-  }
-
-  async function removeLogo(id: string) {
-    const res = await fetch('/api/store-logos', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    });
-    if (res.ok) load();
-  }
-
-  return (
-    <div>
-      <label className="mb-1 block text-xs font-medium text-ink/60">
-        Logo Tambahan (tampil berjejer di homepage, bisa lebih dari satu — mis. logo BAW + logo brand cabang)
-      </label>
-      <div className="flex flex-wrap gap-2">
-        {logos.map((l) => (
-          <div key={l.id} className="relative">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={l.url} alt="logo" className="h-14 w-14 rounded-lg border border-ink/10 object-cover" />
-            <button
-              onClick={() => removeLogo(l.id)}
-              className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-xs text-white"
-            >
-              ×
-            </button>
-          </div>
-        ))}
-      </div>
-      <div className="mt-2">
-        <ImageUploadField label="Tambah Logo Baru" value={newUrl} onChange={(v) => addLogo(v)} />
-      </div>
     </div>
   );
 }
@@ -605,14 +568,14 @@ function KaryawanTab() {
 function ProdukTab() {
   const [products, setProducts] = useState<Product[]>([]);
   const [nama, setNama] = useState('');
-  const [deskripsi, setDeskripsi] = useState('');
   const [kode, setKode] = useState('');
+  const [deskripsi, setDeskripsi] = useState('');
   const [hargaJual, setHargaJual] = useState('');
   const [isBotol, setIsBotol] = useState(false);
   const [ukuranBotolMl, setUkuranBotolMl] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
+  const [imageDriveId, setImageDriveId] = useState('');
   const [importMsg, setImportMsg] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Product | null>(null);
 
   function load() {
     fetch('/api/products').then((r) => r.json()).then((d) => setProducts(d.products || []));
@@ -625,21 +588,42 @@ function ProdukTab() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nama,
-        deskripsi,
-        kode: kode || undefined,
+        kode,
+        deskripsi: deskripsi || undefined,
         hargaJual: hargaJual || undefined,
         isBotol,
         ukuranBotolMl: ukuranBotolMl || undefined,
-        imageUrl: imageUrl || undefined,
+        imageDriveId: imageDriveId || undefined,
       }),
     });
     if (res.ok) {
       setNama('');
-      setDeskripsi('');
       setKode('');
+      setDeskripsi('');
       setHargaJual('');
       setUkuranBotolMl('');
-      setImageUrl('');
+      setImageDriveId('');
+      load();
+    }
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    const res = await fetch('/api/products', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editing.id,
+        nama: editing.nama,
+        deskripsi: editing.deskripsi ?? '',
+        hargaJual: editing.hargaJual,
+        isBotol: editing.isBotol,
+        ukuranBotolMl: editing.ukuranBotolMl,
+        imageDriveId: editing.imageDriveId,
+      }),
+    });
+    if (res.ok) {
+      setEditing(null);
       load();
     }
   }
@@ -651,15 +635,6 @@ function ProdukTab() {
       body: JSON.stringify({ id }),
     });
     if (res.ok) load();
-  }
-
-  async function updateProductField(id: string, patch: Partial<Product>) {
-    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-    await fetch('/api/products', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...patch }),
-    });
   }
 
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -690,8 +665,7 @@ function ProdukTab() {
       <div className="ticket space-y-2 p-4">
         <h2 className="font-display text-sm font-semibold text-ink">Import Produk (Excel/CSV)</h2>
         <p className="text-xs text-ink/50">
-          Kolom wajib: <strong>Nama Parfum</strong>, <strong>Deskripsi Produk</strong>. Opsional: Kode,
-          Harga jual, link gambar, Ukuran Botol.
+          Kolom minimal: Nama Produk, Deskripsi. Kolom lain opsional: Kode, Harga jual, link gambar, Ukuran Botol.
         </p>
         <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} className="text-xs" />
         {importMsg && <p className="text-xs text-accent">{importMsg}</p>}
@@ -700,81 +674,104 @@ function ProdukTab() {
       <div className="ticket space-y-2 p-4">
         <h2 className="font-display text-sm font-semibold text-ink">Tambah Produk Manual</h2>
         <Field label="Nama Parfum" value={nama} onChange={setNama} />
+        <Field label="Kode" value={kode} onChange={setKode} />
         <div>
-          <label className="mb-1 block text-xs font-medium text-ink/60">Deskripsi Produk</label>
+          <label className="mb-1 block text-xs font-medium text-ink/60">Deskripsi (tampil di katalog belanja)</label>
           <textarea
             value={deskripsi}
             onChange={(e) => setDeskripsi(e.target.value)}
             rows={2}
-            placeholder="Aroma, karakter, cocok untuk siapa, dll — tampil saat produk di-tap di katalog"
             className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
           />
         </div>
-        <Field label="Kode (opsional)" value={kode} onChange={setKode} />
-        <Field label="Harga Jual (opsional)" value={hargaJual} onChange={setHargaJual} />
+        <Field label="Harga Jual (opsional, kalau bukan isi ulang per-ml)" value={hargaJual} onChange={setHargaJual} />
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={isBotol} onChange={(e) => setIsBotol(e.target.checked)} />
-          Produk Botol
+          Parfum Isi Ulang (pakai ukuran ml + botol di katalog)
         </label>
-        {isBotol && <Field label="Ukuran Botol (ml)" value={ukuranBotolMl} onChange={setUkuranBotolMl} />}
-        <ImageUploadField label="Foto Produk (opsional)" value={imageUrl} onChange={setImageUrl} />
+        {isBotol && <Field label="Ukuran Botol Default (ml)" value={ukuranBotolMl} onChange={setUkuranBotolMl} />}
+        <ImageUploadField label="Foto Produk (opsional)" value={imageDriveId} onChange={setImageDriveId} />
         <button onClick={addProduct} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white">
           Tambah
         </button>
       </div>
 
       <div className="ticket p-4">
-        <h2 className="font-display text-sm font-semibold text-ink">
-          Daftar Produk ({products.length}) — tap untuk edit gambar/deskripsi
-        </h2>
+        <h2 className="font-display text-sm font-semibold text-ink">Daftar Produk ({products.length})</h2>
         <ul className="mt-2 divide-y divide-ink/10 text-sm">
           {products.map((p) => (
-            <li key={p.id} className="py-2">
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => setEditingId(editingId === p.id ? null : p.id)}
-                  className="flex flex-1 items-center gap-2 text-left"
-                >
-                  {p.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.imageUrl} alt={p.nama} className="h-8 w-8 rounded object-cover" />
-                  ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded bg-paper text-[9px] text-ink/40">
-                      N/A
-                    </div>
-                  )}
-                  <span>
-                    {p.nama} {p.kode && <span className="text-ink/40">({p.kode})</span>}
-                  </span>
+            <li key={p.id} className="flex items-center justify-between py-2">
+              <button onClick={() => setEditing(p)} className="flex flex-1 items-center gap-2 text-left">
+                {p.imageDriveId && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.imageDriveId} alt={p.nama} className="h-8 w-8 rounded object-cover" />
+                )}
+                <span>
+                  {p.nama} <span className="text-ink/40">({p.kode})</span>
+                </span>
+              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setEditing(p)} className="text-xs text-accent">
+                  Edit
                 </button>
                 <button onClick={() => deleteProduct(p.id)} className="text-xs text-danger">
                   Hapus
                 </button>
               </div>
-
-              {editingId === p.id && (
-                <div className="mt-2 space-y-2 rounded-lg bg-paper p-3">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-ink/60">Deskripsi</label>
-                    <textarea
-                      defaultValue={p.deskripsi}
-                      rows={2}
-                      onBlur={(e) => updateProductField(p.id, { deskripsi: e.target.value })}
-                      className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-                    />
-                  </div>
-                  <ImageUploadField
-                    label="Foto Produk"
-                    value={p.imageUrl || ''}
-                    onChange={(v) => updateProductField(p.id, { imageUrl: v })}
-                  />
-                </div>
-              )}
             </li>
           ))}
-          {products.length === 0 && <p className="py-2 text-xs text-ink/40">Belum ada produk.</p>}
         </ul>
       </div>
+
+      {editing && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
+          onClick={() => setEditing(null)}
+        >
+          <div className="ticket max-h-[85vh] w-full max-w-sm overflow-y-auto space-y-2 p-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-display text-sm font-semibold text-ink">Edit Produk</h2>
+            <Field label="Nama Parfum" value={editing.nama} onChange={(v) => setEditing({ ...editing, nama: v })} />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink/60">Deskripsi</label>
+              <textarea
+                value={editing.deskripsi ?? ''}
+                onChange={(e) => setEditing({ ...editing, deskripsi: e.target.value })}
+                rows={3}
+                className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+              />
+            </div>
+            <Field
+              label="Harga Jual (opsional)"
+              value={editing.hargaJual !== undefined ? String(editing.hargaJual) : ''}
+              onChange={(v) => setEditing({ ...editing, hargaJual: v ? Number(v) : undefined })}
+            />
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={editing.isBotol}
+                onChange={(e) => setEditing({ ...editing, isBotol: e.target.checked })}
+              />
+              Parfum Isi Ulang
+            </label>
+            <ImageUploadField
+              label="Foto Produk"
+              value={editing.imageDriveId ?? ''}
+              onChange={(v) => setEditing({ ...editing, imageDriveId: v })}
+            />
+            <div className="flex gap-2 pt-2">
+              <button onClick={saveEdit} className="flex-1 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white">
+                Simpan
+              </button>
+              <button
+                onClick={() => setEditing(null)}
+                className="flex-1 rounded-lg border border-ink/15 px-4 py-2 text-sm font-semibold text-ink"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -867,31 +864,6 @@ function HargaTab() {
         <button onClick={addBottleTier} className="mt-2 text-xs text-accent">
           + Tambah tier botol
         </button>
-      </div>
-
-      <div className="ticket space-y-3 p-4">
-        <h2 className="font-display text-sm font-semibold text-ink">Batas Ukuran Botol</h2>
-        <p className="text-xs text-ink/50">
-          Ukuran botol maksimal yang boleh dipilih kasir/customer, tergantung tipe transaksi.
-        </p>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-ink/60">Maks Botol Eceran (ml)</label>
-          <input
-            type="number"
-            value={config.ecerMaxMl}
-            onChange={(e) => setConfig({ ...config!, ecerMaxMl: Number(e.target.value) })}
-            className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-ink/60">Maks Botol Grosir (ml)</label>
-          <input
-            type="number"
-            value={config.grosirMaxMl}
-            onChange={(e) => setConfig({ ...config!, grosirMaxMl: Number(e.target.value) })}
-            className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"
-          />
-        </div>
       </div>
 
       {msg && <p className="text-xs text-accent">{msg}</p>}
@@ -1208,102 +1180,6 @@ function StokTab() {
 }
 
 // ============================================================
-function FeedsTab() {
-  const [posts, setPosts] = useState<any[]>([]);
-  const [caption, setCaption] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
-  const [posting, setPosting] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  function load() {
-    fetch('/api/feeds').then((r) => r.json()).then((d) => setPosts(d.posts || []));
-  }
-  useEffect(load, []);
-
-  async function submitPost() {
-    if (!imageUrl) {
-      setMsg('Upload gambar dulu.');
-      return;
-    }
-    setPosting(true);
-    const res = await fetch('/api/feeds', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ caption, imageUrl }),
-    });
-    const data = await res.json();
-    setPosting(false);
-    if (!res.ok) {
-      setMsg(data.error);
-      return;
-    }
-    setCaption('');
-    setImageUrl('');
-    setMsg('Berhasil diposting.');
-    load();
-  }
-
-  async function hapusPost(id: string) {
-    const res = await fetch('/api/feeds', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    });
-    if (res.ok) load();
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="ticket space-y-2 p-4">
-        <h2 className="font-display text-sm font-semibold text-ink">Posting ke Feeds</h2>
-        <ImageUploadField label="Foto" value={imageUrl} onChange={setImageUrl} folder="feeds" />
-        <div>
-          <label className="mb-1 block text-xs font-medium text-ink/60">Caption (opsional)</label>
-          <textarea
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            rows={2}
-            className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-          />
-        </div>
-        {msg && <p className="text-xs text-accent">{msg}</p>}
-        <button
-          onClick={submitPost}
-          disabled={posting}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-        >
-          {posting ? 'Memposting...' : 'Posting'}
-        </button>
-      </div>
-
-      <div className="ticket p-4">
-        <h2 className="font-display text-sm font-semibold text-ink">
-          Semua Postingan ({posts.length}) — moderasi
-        </h2>
-        <ul className="mt-2 space-y-3">
-          {posts.map((p) => (
-            <li key={p.id} className="flex items-center gap-3 rounded-lg bg-paper p-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.imageUrl} alt={p.caption} className="h-12 w-12 rounded object-cover" />
-              <div className="flex-1 text-xs">
-                <p className="text-ink">{p.caption || '(tanpa caption)'}</p>
-                <p className="text-ink/40">
-                  ♥ {p.likeCount} · 💬 {p.commentCount}
-                </p>
-              </div>
-              <button onClick={() => hapusPost(p.id)} className="text-xs text-danger">
-                Hapus
-              </button>
-            </li>
-          ))}
-          {posts.length === 0 && <p className="text-xs text-ink/40">Belum ada postingan.</p>}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
 function RekapTab() {
   const [data, setData] = useState<any>(null);
 
@@ -1314,34 +1190,7 @@ function RekapTab() {
   if (!data) return <p className="text-sm text-ink/50">Memuat...</p>;
   if (data.error) return <p className="text-sm text-danger">{data.error}</p>;
 
-  const maxOrder = Math.max(...data.bestSeller.map((b: any) => b.orderCount), 1);
-
-  function exportExcel() {
-    const wb = XLSX.utils.book_new();
-
-    const ringkasan = [
-      { Metrik: 'Total Transaksi', Nilai: data.totalTransaksi },
-      { Metrik: 'Total Ml', Nilai: data.totalMl },
-      { Metrik: 'Total Pendapatan', Nilai: data.totalPendapatan },
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ringkasan), 'Ringkasan');
-
-    const bestSellerSheet = data.bestSeller.map((b: any) => ({
-      'Nama Parfum': b.nama,
-      'Jumlah Order': b.orderCount,
-      'Total Ml': b.ml,
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bestSellerSheet), 'Best Seller');
-
-    const perKaryawanSheet = data.perKaryawan.map((k: any) => ({
-      Karyawan: k.karyawan,
-      'Total Ml': k.totalMl,
-      Pendapatan: k.totalPendapatan,
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(perKaryawanSheet), 'Per Karyawan');
-
-    XLSX.writeFile(wb, `rekap-penjualan-${new Date().toISOString().slice(0, 10)}.xlsx`);
-  }
+  const maxOrder = Math.max(...data.bestSeller.map((b: any) => b.jumlahOrder), 1);
 
   return (
     <div className="space-y-4">
@@ -1362,28 +1211,19 @@ function RekapTab() {
         </div>
       </div>
 
-      <button
-        onClick={exportExcel}
-        className="w-full rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-      >
-        Export Rekap ke Excel
-      </button>
-
       <div className="ticket p-4">
-        <h2 className="font-display text-sm font-semibold text-ink">Best Seller (by jumlah order)</h2>
+        <h2 className="font-display text-sm font-semibold text-ink">Best Seller (berdasarkan jumlah order)</h2>
         <div className="mt-3 space-y-2">
           {data.bestSeller.map((b: any) => (
             <div key={b.nama}>
               <div className="flex justify-between text-xs text-ink/60">
                 <span>{b.nama}</span>
-                <span>
-                  {b.orderCount}x order · {b.ml}ml
-                </span>
+                <span>{b.jumlahOrder}× order · {b.ml}ml</span>
               </div>
               <div className="mt-1 h-2 rounded-full bg-paper">
                 <div
                   className="h-2 rounded-full bg-accent"
-                  style={{ width: `${(b.orderCount / maxOrder) * 100}%` }}
+                  style={{ width: `${(b.jumlahOrder / maxOrder) * 100}%` }}
                 />
               </div>
             </div>

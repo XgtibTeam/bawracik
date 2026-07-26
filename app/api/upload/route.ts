@@ -15,13 +15,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const imageBase64 = body?.imageBase64 as string;
     const filename = (body?.filename || `upload-${Date.now()}.jpg`) as string;
-    const folder = body?.folder === 'feeds' ? 'feeds' : 'products';
 
     if (!imageBase64 || !imageBase64.startsWith('data:image/')) {
       return NextResponse.json({ error: 'Gambar tidak valid' }, { status: 400 });
     }
 
-    const { fileId, url } = await uploadPublicImage(imageBase64, filename, folder);
+    const { fileId, url } = await uploadPublicImage(imageBase64, filename, 'products');
     return NextResponse.json({ fileId, url });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

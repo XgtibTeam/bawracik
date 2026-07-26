@@ -6,10 +6,7 @@ type Session = { role: string; nama: string; cabangId: string | null; username: 
 type PricingConfig = {
   mlTiers: { hargaPerMl: number }[];
   bottleTiers: { minMl: number; maxMl: number; harga: number }[];
-  ecerMaxMl: number;
-  grosirMaxMl: number;
 };
-type Product = { id: string; nama: string; deskripsi: string; imageUrl?: string; hargaJual?: number };
 type CartItem = { namaParfum: string; ml: number; hargaPerMl: number };
 type Member = {
   id: string;
@@ -23,10 +20,9 @@ type Member = {
 export default function KasirPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [pricing, setPricing] = useState<PricingConfig | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
 
   const [hargaPerMl, setHargaPerMl] = useState<number>(2000);
-  const [activeProduct, setActiveProduct] = useState<Product | null>(null);
+  const [namaParfum, setNamaParfum] = useState('');
   const [inputMode, setInputMode] = useState<'rupiah' | 'ml'>('rupiah');
   const [inputValue, setInputValue] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -59,16 +55,7 @@ export default function KasirPage() {
     fetch('/api/pricing')
       .then((r) => r.json())
       .then((d) => setPricing(d.config));
-    fetch('/api/products')
-      .then((r) => r.json())
-      .then((d) => setProducts(d.products || []));
   }, []);
-
-  const botolMax = tipe === 'ecer' ? pricing?.ecerMaxMl ?? 100 : pricing?.grosirMaxMl ?? 1000;
-
-  useEffect(() => {
-    if (ukuranBotolMl > botolMax) setUkuranBotolMl(botolMax);
-  }, [tipe, botolMax]);
 
   const mlFromInput =
     inputMode === 'rupiah'
@@ -81,7 +68,7 @@ export default function KasirPage() {
 
   const biayaBotol =
     pakaiBotol && pricing
-      ? pricing.bottleTiers.find((t) => ukuranBotolMl >= t.minMl && ukuranBotolMl <= t.maxMl)?.harga ?? 0
+      ? (Array.isArray(pricing.bottleTiers) ? pricing.bottleTiers : []).find((t) => ukuranBotolMl >= t.minMl && ukuranBotolMl <= t.maxMl)?.harga ?? 0
       : 0;
 
   const subtotalParfum = cart.reduce((s, it) => s + Math.round(it.ml * it.hargaPerMl), 0);
@@ -127,10 +114,10 @@ export default function KasirPage() {
   }
 
   function addToCart() {
-    if (!activeProduct || mlFromInput <= 0) return;
-    setCart((c) => [...c, { namaParfum: activeProduct.nama, ml: mlFromInput, hargaPerMl }]);
+    if (!namaParfum.trim() || mlFromInput <= 0) return;
+    setCart((c) => [...c, { namaParfum: namaParfum.trim(), ml: mlFromInput, hargaPerMl }]);
+    setNamaParfum('');
     setInputValue('');
-    setActiveProduct(null);
   }
 
   function removeFromCart(idx: number) {
@@ -296,119 +283,65 @@ export default function KasirPage() {
             ))}
           </div>
 
-          <div className="ticket mt-4 p-4">
-            <h2 className="font-display text-sm font-semibold text-ink">Pilih Parfum dari Katalog</h2>
-            {products.length === 0 && (
-              <p className="mt-2 text-xs text-warn">
-                Belum ada produk. Minta admin tambah produk dulu di Kelola Toko → Produk.
-              </p>
-            )}
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {products.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    setActiveProduct(p);
-                    setInputValue('');
-                  }}
-                  className="flex items-center gap-2 rounded-lg border border-ink/10 p-2 text-left text-xs hover:border-accent"
-                >
-                  {p.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.imageUrl} alt={p.nama} className="h-10 w-10 rounded object-cover" />
-                  ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded bg-paper text-[10px] text-ink/40">
-                      N/A
-                    </div>
-                  )}
-                  <span>{p.nama}</span>
-                </button>
-              ))}
+          <div className="ticket mt-4 space-y-3 p-4">
+            <h2 className="font-display text-sm font-semibold text-ink">Tambah Parfum</h2>
+            <input
+              value={namaParfum}
+              onChange={(e) => setNamaParfum(e.target.value)}
+              placeholder="Nama parfum (mis. Polo Blue)"
+              className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink/60">Harga per ml</label>
+              <select
+                value={hargaPerMl}
+                onChange={(e) => setHargaPerMl(Number(e.target.value))}
+                className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+              >
+                {(pricing?.mlTiers ?? []).map((t) => (
+                  <option key={t.hargaPerMl} value={t.hargaPerMl}>
+                    Rp{t.hargaPerMl.toLocaleString('id-ID')} / ml
+                  </option>
+                ))}
+              </select>
             </div>
-          </div>
-
-          {activeProduct && (
-            <div
-              className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
-              onClick={() => setActiveProduct(null)}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setInputMode('rupiah')}
+                className={`flex-1 rounded-lg py-1.5 text-xs font-semibold ${
+                  inputMode === 'rupiah' ? 'bg-accentSoft text-accent' : 'bg-paper text-ink/50'
+                }`}
+              >
+                Input Rupiah
+              </button>
+              <button
+                onClick={() => setInputMode('ml')}
+                className={`flex-1 rounded-lg py-1.5 text-xs font-semibold ${
+                  inputMode === 'ml' ? 'bg-accentSoft text-accent' : 'bg-paper text-ink/50'
+                }`}
+              >
+                Input Ml
+              </button>
+            </div>
+            <input
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              type="number"
+              placeholder={inputMode === 'rupiah' ? 'Nominal dibayar (mis. 20000)' : 'Jumlah ml (mis. 10)'}
+              className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+            <p className="text-xs text-ink/50">
+              {inputMode === 'rupiah'
+                ? `≈ ${mlFromInput} ml`
+                : `≈ Rp${rupiahFromInput.toLocaleString('id-ID')}`}
+            </p>
+            <button
+              onClick={addToCart}
+              className="w-full rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
             >
-              <div className="ticket w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
-                {activeProduct.imageUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={activeProduct.imageUrl}
-                    alt={activeProduct.nama}
-                    className="mb-3 h-36 w-full rounded-lg object-cover"
-                  />
-                )}
-                <h3 className="font-display text-lg font-semibold text-ink">{activeProduct.nama}</h3>
-                {activeProduct.deskripsi && (
-                  <p className="mt-1 text-sm text-ink/60">{activeProduct.deskripsi}</p>
-                )}
-
-                <div className="mt-3 space-y-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-ink/60">Harga per ml</label>
-                    <select
-                      value={hargaPerMl}
-                      onChange={(e) => setHargaPerMl(Number(e.target.value))}
-                      className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-                    >
-                      {(pricing?.mlTiers ?? []).map((t) => (
-                        <option key={t.hargaPerMl} value={t.hargaPerMl}>
-                          Rp{t.hargaPerMl.toLocaleString('id-ID')} / ml
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setInputMode('rupiah')}
-                      className={`flex-1 rounded-lg py-1.5 text-xs font-semibold ${
-                        inputMode === 'rupiah' ? 'bg-accentSoft text-accent' : 'bg-paper text-ink/50'
-                      }`}
-                    >
-                      Input Rupiah
-                    </button>
-                    <button
-                      onClick={() => setInputMode('ml')}
-                      className={`flex-1 rounded-lg py-1.5 text-xs font-semibold ${
-                        inputMode === 'ml' ? 'bg-accentSoft text-accent' : 'bg-paper text-ink/50'
-                      }`}
-                    >
-                      Input Ml
-                    </button>
-                  </div>
-                  <input
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    type="number"
-                    placeholder={inputMode === 'rupiah' ? 'Nominal dibayar (mis. 20000)' : 'Jumlah ml (mis. 10)'}
-                    className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-                  />
-                  <p className="text-xs text-ink/50">
-                    {inputMode === 'rupiah'
-                      ? `≈ ${mlFromInput} ml`
-                      : `≈ Rp${rupiahFromInput.toLocaleString('id-ID')}`}
-                  </p>
-                </div>
-
-                <button
-                  onClick={addToCart}
-                  disabled={mlFromInput <= 0}
-                  className="mt-4 w-full rounded-card bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-                >
-                  + Tambah ke Keranjang
-                </button>
-                <button
-                  onClick={() => setActiveProduct(null)}
-                  className="mt-2 w-full rounded-card border border-ink/15 px-4 py-2.5 text-sm font-semibold text-ink hover:bg-paper"
-                >
-                  Tutup
-                </button>
-              </div>
-            </div>
-          )}
+              + Tambah ke Keranjang
+            </button>
+          </div>
 
           <div className="ticket mt-4 space-y-2 p-4">
             <label className="flex items-center gap-2 text-sm font-semibold text-ink">
@@ -420,17 +353,11 @@ export default function KasirPage() {
                 <input
                   type="number"
                   value={ukuranBotolMl}
-                  min={3}
-                  max={botolMax}
-                  onChange={(e) =>
-                    setUkuranBotolMl(Math.min(botolMax, Math.max(0, Number(e.target.value))))
-                  }
+                  onChange={(e) => setUkuranBotolMl(Number(e.target.value))}
                   className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
                   placeholder="Ukuran botol (ml)"
                 />
-                <p className="mt-1 text-xs text-ink/50">
-                  Maks {botolMax}ml untuk {tipe} · Biaya botol: Rp{biayaBotol.toLocaleString('id-ID')}
-                </p>
+                <p className="mt-1 text-xs text-ink/50">Biaya botol: Rp{biayaBotol.toLocaleString('id-ID')}</p>
               </div>
             )}
           </div>
