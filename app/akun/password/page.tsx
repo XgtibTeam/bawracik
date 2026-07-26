@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function GantiPasswordPage() {
+  const router = useRouter();
   const [nama, setNama] = useState('');
   const [passwordLama, setPasswordLama] = useState('');
   const [passwordBaru, setPasswordBaru] = useState('');
@@ -51,9 +53,20 @@ export default function GantiPasswordPage() {
     }
   }
 
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/');
+    router.refresh();
+  }
+
   return (
     <main className="mx-auto max-w-sm px-4 py-8">
-      <p className="text-xs uppercase tracking-widest text-accent">Akun · {nama}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs uppercase tracking-widest text-accent">Akun · {nama}</p>
+        <button onClick={handleLogout} className="text-xs font-semibold text-danger underline">
+          Keluar
+        </button>
+      </div>
       <h1 className="mt-1 font-display text-2xl font-semibold text-ink">Ganti Password</h1>
 
       <form onSubmit={submit} className="ticket mt-4 space-y-3 p-5">

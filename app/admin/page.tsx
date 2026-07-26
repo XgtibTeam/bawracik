@@ -225,7 +225,8 @@ export default function AdminDashboardPage() {
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/admin/login');
+    router.push('/');
+    router.refresh();
   };
 
   const openPhotoPreview = async (fileId: string, label?: string) => {

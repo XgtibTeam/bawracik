@@ -8,5 +8,10 @@ export function driveImageUrl(fileId?: string | null): string | undefined {
   // Kalau yang tersimpan ternyata sudah berupa URL penuh (data lama / kasus
   // lain), pakai apa adanya supaya tidak dobel-format.
   if (fileId.startsWith('http')) return fileId;
-  return `https://drive.google.com/uc?export=view&id=${fileId}`;
+  // PENTING: format "uc?export=view" SERING gagal tampil kalau dipasang
+  // langsung di <img src> — Google kadang mengembalikan halaman HTML
+  // "konfirmasi download" alih-alih bytes gambar, jadi <img> tampil
+  // rusak/patah (ini penyebab foto feed tidak muncul). Format "thumbnail"
+  // jauh lebih stabil untuk dipasang langsung sebagai <img src>.
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
 }

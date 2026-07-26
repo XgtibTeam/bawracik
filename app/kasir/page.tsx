@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 type Session = { role: string; nama: string; cabangId: string | null; username: string };
+type Branch = { id: string; nama: string };
 type PricingConfig = {
   mlTiers: { hargaPerMl: number }[];
   bottleTiers: { minMl: number; maxMl: number; harga: number }[];
@@ -18,8 +20,11 @@ type Member = {
 };
 
 export default function KasirPage() {
+  const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [pricing, setPricing] = useState<PricingConfig | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedCabangId, setSelectedCabangId] = useState<string>('');
 
   const [hargaPerMl, setHargaPerMl] = useState<number>(2000);
   const [namaParfum, setNamaParfum] = useState('');
@@ -55,7 +60,21 @@ export default function KasirPage() {
     fetch('/api/pricing')
       .then((r) => r.json())
       .then((d) => setPricing(d.config));
+    fetch('/api/branches')
+      .then((r) => r.json())
+      .then((d) => setBranches(Array.isArray(d.branches) ? d.branches : []));
   }, []);
+
+  // Superadmin tidak terikat 1 cabang (cabangId null), jadi harus pilih
+  // cabang secara manual sebelum bisa checkout. Staff/admin biasa langsung
+  // pakai cabangId dari sesi login mereka.
+  const effectiveCabangId = session?.cabangId || selectedCabangId || '';
+
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/');
+    router.refresh();
+  }
 
   const mlFromInput =
     inputMode === 'rupiah'
@@ -126,7 +145,11 @@ export default function KasirPage() {
 
   async function cariMember() {
     if (!waMember.trim()) return;
-    const res = await fetch(`/api/members?wa=${encodeURIComponent(waMember.trim())}`);
+    const res = await fetch('/api/members/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wa: waMember.trim() }),
+    });
     const data = await res.json();
     if (data.member) {
       setMember(data.member);
@@ -139,8 +162,8 @@ export default function KasirPage() {
   }
 
   async function handleCheckout() {
-    if (!session?.cabangId) {
-      setError('Cabang kasir tidak diketahui, login ulang.');
+    if (!effectiveCabangId) {
+      setError('Cabang belum dipilih. Pilih cabang toko dulu di atas.');
       return;
     }
     if (cart.length === 0) {
@@ -159,7 +182,7 @@ export default function KasirPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          cabangId: session.cabangId,
+          cabangId: effectiveCabangId,
           items: cart,
           ukuranBotolMl: pakaiBotol ? ukuranBotolMl : undefined,
           tipe,
@@ -234,18 +257,43 @@ export default function KasirPage() {
     <main className="mx-auto max-w-md px-4 py-6 pb-24">
       <div className="flex items-center justify-between">
         <p className="text-xs uppercase tracking-widest text-accent">
-          Kasir · {session?.nama} {session?.cabangId ? '' : '(super admin, pilih cabang manual belum tersedia)'}
+          Kasir · {session?.nama} {session?.cabangId ? '' : '(super admin)'}
         </p>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <a href="/akun/password" className="text-xs text-accent underline">
             Ganti Password
           </a>
           <a href="/kasir/stok" className="text-xs text-accent underline">
             Input Stok →
           </a>
+          <button onClick={handleLogout} className="text-xs font-semibold text-danger underline">
+            Keluar
+          </button>
         </div>
       </div>
       <h1 className="mt-1 font-display text-2xl font-semibold text-ink">Checkout Etalase</h1>
+
+      {/* Superadmin tidak terikat 1 cabang — wajib pilih cabang manual dulu */}
+      {!session?.cabangId && (
+        <div className="ticket mt-3 space-y-1 p-3">
+          <label className="block text-xs font-medium text-ink/60">Pilih Cabang Toko</label>
+          <select
+            value={selectedCabangId}
+            onChange={(e) => setSelectedCabangId(e.target.value)}
+            className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+          >
+            <option value="">— Pilih cabang —</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.nama}
+              </option>
+            ))}
+          </select>
+          {branches.length === 0 && (
+            <p className="text-xs text-warn">Belum ada cabang toko terdaftar. Tambah cabang dulu di panel admin.</p>
+          )}
+        </div>
+      )}
 
       {/* Step indicator */}
       <div className="mt-3 flex items-center gap-2">

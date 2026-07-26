@@ -88,7 +88,7 @@ export default function MemberProfilPage() {
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/member/login';
+    window.location.href = '/';
   }
 
   if (loading) return <main className="p-6 text-sm text-ink/50">Memuat...</main>;

@@ -15,6 +15,7 @@ export default function PublicShell({ children }: { children: React.ReactNode })
   return (
     <div className="pb-20">
       {children}
+      <p className="pb-3 pt-6 text-center text-[11px] text-ink/30">By Toko Vorie</p>
       <BottomNav items={NAV_ITEMS} />
     </div>
   );
