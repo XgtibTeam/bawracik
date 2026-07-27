@@ -8,8 +8,10 @@ type Branch = { id: string; nama: string };
 type PricingConfig = {
   mlTiers: { hargaPerMl: number }[];
   bottleTiers: { minMl: number; maxMl: number; harga: number }[];
+  categoryPrices: { kategori: string; hargaPerMl: number }[];
 };
-type CartItem = { namaParfum: string; ml: number; hargaPerMl: number };
+type Product = { id: string; nama: string; kode: string; kategori?: string };
+type CartItem = { productId?: string; namaParfum: string; ml: number; hargaPerMl: number };
 type Member = {
   id: string;
   nama: string;
@@ -26,8 +28,10 @@ export default function KasirPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedCabangId, setSelectedCabangId] = useState<string>('');
 
-  const [hargaPerMl, setHargaPerMl] = useState<number>(2000);
-  const [namaParfum, setNamaParfum] = useState('');
+  const [hargaPerMl, setHargaPerMl] = useState<number>(0);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [productSearch, setProductSearch] = useState('');
   const [inputMode, setInputMode] = useState<'rupiah' | 'ml'>('rupiah');
   const [inputValue, setInputValue] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -63,7 +67,32 @@ export default function KasirPage() {
     fetch('/api/branches')
       .then((r) => r.json())
       .then((d) => setBranches(Array.isArray(d.branches) ? d.branches : []));
+    fetch('/api/products')
+      .then((r) => r.json())
+      .then((d) => setProducts(Array.isArray(d.products) ? d.products : []));
   }, []);
+
+  const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
+
+  // Kasir tidak lagi ketik nama parfum & harga manual — begitu produk dari
+  // katalog dipilih, harga per-ml otomatis ikut kategori produk itu
+  // (diatur admin/superadmin di Admin > Toko > Harga).
+  useEffect(() => {
+    if (!selectedProduct || !pricing) {
+      setHargaPerMl(0);
+      return;
+    }
+    const tier = pricing.categoryPrices?.find((c) => c.kategori === selectedProduct.kategori);
+    setHargaPerMl(tier ? tier.hargaPerMl : 0);
+  }, [selectedProduct, pricing]);
+
+  const filteredProducts = productSearch.trim()
+    ? products.filter(
+        (p) =>
+          p.nama.toLowerCase().includes(productSearch.trim().toLowerCase()) ||
+          p.kode.toLowerCase().includes(productSearch.trim().toLowerCase())
+      )
+    : products;
 
   // Superadmin tidak terikat 1 cabang (cabangId null), jadi harus pilih
   // cabang secara manual sebelum bisa checkout. Staff/admin biasa langsung
@@ -133,9 +162,13 @@ export default function KasirPage() {
   }
 
   function addToCart() {
-    if (!namaParfum.trim() || mlFromInput <= 0) return;
-    setCart((c) => [...c, { namaParfum: namaParfum.trim(), ml: mlFromInput, hargaPerMl }]);
-    setNamaParfum('');
+    if (!selectedProduct || mlFromInput <= 0 || hargaPerMl <= 0) return;
+    setCart((c) => [
+      ...c,
+      { productId: selectedProduct.id, namaParfum: selectedProduct.nama, ml: mlFromInput, hargaPerMl },
+    ]);
+    setSelectedProductId('');
+    setProductSearch('');
     setInputValue('');
   }
 
@@ -332,27 +365,39 @@ export default function KasirPage() {
           </div>
 
           <div className="ticket mt-4 space-y-3 p-4">
-            <h2 className="font-display text-sm font-semibold text-ink">Tambah Parfum</h2>
+            <h2 className="font-display text-sm font-semibold text-ink">Tambah Parfum (dari Katalog)</h2>
             <input
-              value={namaParfum}
-              onChange={(e) => setNamaParfum(e.target.value)}
-              placeholder="Nama parfum (mis. Polo Blue)"
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              placeholder="Cari nama/kode produk..."
               className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
             />
-            <div>
-              <label className="mb-1 block text-xs font-medium text-ink/60">Harga per ml</label>
-              <select
-                value={hargaPerMl}
-                onChange={(e) => setHargaPerMl(Number(e.target.value))}
-                className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-              >
-                {(pricing?.mlTiers ?? []).map((t) => (
-                  <option key={t.hargaPerMl} value={t.hargaPerMl}>
-                    Rp{t.hargaPerMl.toLocaleString('id-ID')} / ml
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              value={selectedProductId}
+              onChange={(e) => setSelectedProductId(e.target.value)}
+              className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+            >
+              <option value="">— Pilih produk dari katalog —</option>
+              {filteredProducts.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nama} ({p.kode}){p.kategori ? ` · ${p.kategori}` : ''}
+                </option>
+              ))}
+            </select>
+            {products.length === 0 && (
+              <p className="text-xs text-warn">
+                Katalog produk masih kosong. Tambah/import produk dulu di Admin → Toko → Produk.
+              </p>
+            )}
+            {selectedProduct && (
+              <p className="text-xs text-ink/50">
+                Kategori: <span className="font-semibold text-ink">{selectedProduct.kategori || '—'}</span> · Harga:{' '}
+                <span className="font-semibold text-ink">Rp{hargaPerMl.toLocaleString('id-ID')}/ml</span>
+                {!selectedProduct.kategori && (
+                  <span className="text-danger"> (produk ini belum ada kategori, set dulu di Admin → Produk)</span>
+                )}
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={() => setInputMode('rupiah')}
@@ -385,7 +430,8 @@ export default function KasirPage() {
             </p>
             <button
               onClick={addToCart}
-              className="w-full rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+              disabled={!selectedProduct || hargaPerMl <= 0}
+              className="w-full rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40"
             >
               + Tambah ke Keranjang
             </button>

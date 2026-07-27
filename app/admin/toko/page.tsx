@@ -5,11 +5,23 @@ import * as XLSX from 'xlsx';
 
 type Branch = { id: string; nama: string; alamat?: string; waCS?: string };
 type Employee = { id: string; nama: string; username: string; role: string; cabangId: string | null };
-type Product = { id: string; nama: string; kode: string; deskripsi?: string; hargaJual?: number; isBotol: boolean; ukuranBotolMl?: number; imageDriveId?: string };
+type Product = {
+  id: string;
+  nama: string;
+  kode: string;
+  deskripsi?: string;
+  hargaJual?: number;
+  isBotol: boolean;
+  ukuranBotolMl?: number;
+  imageDriveId?: string;
+  kategori?: string;
+};
 type PricingConfig = {
   mlTiers: { hargaPerMl: number }[];
   bottleTiers: { minMl: number; maxMl: number; harga: number }[];
+  categoryPrices: { kategori: string; hargaPerMl: number }[];
 };
+const KATEGORI_OPTIONS = ['biasa', 'sedang', 'mewah', 'series'] as const;
 type Voucher = { code: string; tipe: string; nilai: number; aktif: boolean };
 type HomeSection = { id: string; type: 'banner' | 'teks' | 'gambar' | 'promo'; judul?: string; isi?: string; gambarUrl?: string };
 type StoreProfile = {
@@ -577,6 +589,7 @@ function ProdukTab() {
   const [products, setProducts] = useState<Product[]>([]);
   const [nama, setNama] = useState('');
   const [kode, setKode] = useState('');
+  const [kategori, setKategori] = useState('');
   const [deskripsi, setDeskripsi] = useState('');
   const [hargaJual, setHargaJual] = useState('');
   const [isBotol, setIsBotol] = useState(false);
@@ -597,6 +610,7 @@ function ProdukTab() {
       body: JSON.stringify({
         nama,
         kode,
+        kategori: kategori || undefined,
         deskripsi: deskripsi || undefined,
         hargaJual: hargaJual || undefined,
         isBotol,
@@ -607,6 +621,7 @@ function ProdukTab() {
     if (res.ok) {
       setNama('');
       setKode('');
+      setKategori('');
       setDeskripsi('');
       setHargaJual('');
       setUkuranBotolMl('');
@@ -623,6 +638,7 @@ function ProdukTab() {
       body: JSON.stringify({
         id: editing.id,
         nama: editing.nama,
+        kategori: editing.kategori || undefined,
         deskripsi: editing.deskripsi ?? '',
         hargaJual: editing.hargaJual,
         isBotol: editing.isBotol,
@@ -673,7 +689,9 @@ function ProdukTab() {
       <div className="ticket space-y-2 p-4">
         <h2 className="font-display text-sm font-semibold text-ink">Import Produk (Excel/CSV)</h2>
         <p className="text-xs text-ink/50">
-          Kolom minimal: Nama Produk, Deskripsi. Kolom lain opsional: Kode, Harga jual, link gambar, Ukuran Botol.
+          Kolom: <b>nama_product</b> (wajib), <b>kode_product</b> (opsional, auto-generate kalau kosong),{' '}
+          <b>kategori_product</b> (opsional — isi salah satu: {KATEGORI_OPTIONS.join(', ')}). Kolom lain opsional:
+          Deskripsi, Harga jual, link gambar, Ukuran Botol.
         </p>
         <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} className="text-xs" />
         {importMsg && <p className="text-xs text-accent">{importMsg}</p>}
@@ -683,6 +701,21 @@ function ProdukTab() {
         <h2 className="font-display text-sm font-semibold text-ink">Tambah Produk Manual</h2>
         <Field label="Nama Parfum" value={nama} onChange={setNama} />
         <Field label="Kode" value={kode} onChange={setKode} />
+        <div>
+          <label className="mb-1 block text-xs font-medium text-ink/60">Kategori (menentukan harga per-ml di kasir)</label>
+          <select
+            value={kategori}
+            onChange={(e) => setKategori(e.target.value)}
+            className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+          >
+            <option value="">— Tanpa kategori —</option>
+            {KATEGORI_OPTIONS.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-ink/60">Deskripsi (tampil di katalog belanja)</label>
           <textarea
@@ -716,6 +749,11 @@ function ProdukTab() {
                 )}
                 <span>
                   {p.nama} <span className="text-ink/40">({p.kode})</span>
+                  {p.kategori && (
+                    <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
+                      {p.kategori}
+                    </span>
+                  )}
                 </span>
               </button>
               <div className="flex items-center gap-3">
@@ -739,6 +777,21 @@ function ProdukTab() {
           <div className="ticket max-h-[85vh] w-full max-w-sm overflow-y-auto space-y-2 p-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="font-display text-sm font-semibold text-ink">Edit Produk</h2>
             <Field label="Nama Parfum" value={editing.nama} onChange={(v) => setEditing({ ...editing, nama: v })} />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink/60">Kategori</label>
+              <select
+                value={editing.kategori ?? ''}
+                onChange={(e) => setEditing({ ...editing, kategori: e.target.value || undefined })}
+                className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+              >
+                <option value="">— Tanpa kategori —</option>
+                {KATEGORI_OPTIONS.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-ink/60">Deskripsi</label>
               <textarea
@@ -790,7 +843,18 @@ function HargaTab() {
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/pricing').then((r) => r.json()).then((d) => setConfig(d.config));
+    fetch('/api/pricing')
+      .then((r) => r.json())
+      .then((d) => {
+        const c: PricingConfig = d.config;
+        // Jaga-jaga kalau baris pricing_config lama belum punya kolom
+        // category_prices (belum jalanin migration SQL) — isi default 4
+        // kategori biar UI tidak error dan tetap bisa diisi lalu disimpan.
+        if (!Array.isArray(c.categoryPrices) || c.categoryPrices.length === 0) {
+          c.categoryPrices = KATEGORI_OPTIONS.map((kategori) => ({ kategori, hargaPerMl: 0 }));
+        }
+        setConfig(c);
+      });
   }, []);
 
   if (!config) return <p className="text-sm text-ink/50">Memuat...</p>;
@@ -811,6 +875,10 @@ function HargaTab() {
   function addBottleTier() {
     setConfig({ ...config!, bottleTiers: [...config!.bottleTiers, { minMl: 0, maxMl: 0, harga: 0 }] });
   }
+  function updateCategoryPrice(kategori: string, value: number) {
+    const categoryPrices = config!.categoryPrices.map((c) => (c.kategori === kategori ? { ...c, hargaPerMl: value } : c));
+    setConfig({ ...config!, categoryPrices });
+  }
 
   async function save() {
     const res = await fetch('/api/pricing', {
@@ -825,7 +893,29 @@ function HargaTab() {
   return (
     <div className="space-y-4">
       <div className="ticket p-4">
-        <h2 className="font-display text-sm font-semibold text-ink">Harga per ml</h2>
+        <h2 className="font-display text-sm font-semibold text-ink">Harga per Kategori Produk (dipakai kasir dari katalog)</h2>
+        <p className="mt-1 text-xs text-ink/50">
+          Saat kasir pilih produk dari katalog, harga per-ml otomatis ikut kategori produk itu.
+        </p>
+        <div className="mt-2 space-y-2">
+          {config.categoryPrices.map((c) => (
+            <div key={c.kategori} className="flex items-center gap-2">
+              <span className="w-20 shrink-0 text-sm capitalize text-ink/70">{c.kategori}</span>
+              <span className="text-sm text-ink/40">Rp</span>
+              <input
+                type="number"
+                value={c.hargaPerMl}
+                onChange={(e) => updateCategoryPrice(c.kategori, Number(e.target.value))}
+                className="w-full rounded-lg border border-ink/15 px-2 py-1.5 text-sm"
+              />
+              <span className="shrink-0 text-xs text-ink/40">/ml</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="ticket p-4">
+        <h2 className="font-display text-sm font-semibold text-ink">Harga per ml (opsi manual, non-katalog)</h2>
         <div className="mt-2 grid grid-cols-3 gap-2">
           {config.mlTiers.map((t, i) => (
             <input
@@ -1188,12 +1278,98 @@ function StokTab() {
 }
 
 // ============================================================
+type RekapPeriode = 'harian' | 'bulanan' | 'tahunan' | 'semua';
+
+function rangeForPeriode(periode: RekapPeriode): { from?: string; to?: string } {
+  const now = new Date();
+  if (periode === 'semua') return {};
+  if (periode === 'harian') {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return { from: start.toISOString() };
+  }
+  if (periode === 'bulanan') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: start.toISOString() };
+  }
+  // tahunan
+  const start = new Date(now.getFullYear(), 0, 1);
+  return { from: start.toISOString() };
+}
+
 function RekapTab() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [periode, setPeriode] = useState<RekapPeriode>('harian');
+  const [cabangId, setCabangId] = useState('');
   const [data, setData] = useState<any>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+
+  const isSuperadmin = session?.role === 'superadmin';
 
   useEffect(() => {
-    fetch('/api/reports/sales').then((r) => r.json()).then(setData);
+    fetch('/api/auth/me').then((r) => r.json()).then((d) => setSession(d.session));
+    fetch('/api/branches').then((r) => r.json()).then((d) => setBranches(d.branches || []));
   }, []);
+
+  useEffect(() => {
+    const { from, to } = rangeForPeriode(periode);
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (isSuperadmin && cabangId) params.set('cabangId', cabangId);
+    fetch(`/api/reports/sales?${params.toString()}`)
+      .then((r) => r.json())
+      .then(setData);
+  }, [periode, cabangId, isSuperadmin]);
+
+  async function exportExcel() {
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      const { from, to } = rangeForPeriode(periode);
+      const params = new URLSearchParams();
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      if (isSuperadmin && cabangId) params.set('cabangId', cabangId);
+      const res = await fetch(`/api/reports/export?${params.toString()}`);
+      const exportData = await res.json();
+      if (!res.ok) throw new Error(exportData.error || 'Export gagal');
+
+      const wb = XLSX.utils.book_new();
+      const rows = exportData.rows.map((r: any) => ({
+        Tanggal: new Date(r.tanggal).toLocaleString('id-ID'),
+        'ID Transaksi': r.transaksiId,
+        Cabang: r.cabang,
+        Kasir: r.kasir,
+        Tipe: r.tipe,
+        Produk: r.produk,
+        Ml: r.ml,
+        'Harga/ml': r.hargaPerMl,
+        Subtotal: r.subtotal,
+        Voucher: r.voucher,
+        'Total Transaksi': r.totalTransaksi,
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, 'Penjualan');
+
+      const ringkasan = XLSX.utils.json_to_sheet([
+        { Keterangan: 'Total Transaksi', Nilai: exportData.totalTransaksi },
+        { Keterangan: 'Total Ml', Nilai: exportData.totalMl },
+        { Keterangan: 'Total Pendapatan', Nilai: exportData.totalPendapatan },
+        { Keterangan: 'By', Nilai: 'Toko Vorie' },
+      ]);
+      XLSX.utils.book_append_sheet(wb, ringkasan, 'Ringkasan');
+
+      const label = periode === 'harian' ? 'Harian' : periode === 'bulanan' ? 'Bulanan' : periode === 'tahunan' ? 'Tahunan' : 'Semua';
+      XLSX.writeFile(wb, `Data-Penjualan-${label}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      setExportMsg(`Berhasil export ${rows.length} baris.`);
+    } catch (err: any) {
+      setExportMsg(err.message);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   if (!data) return <p className="text-sm text-ink/50">Memuat...</p>;
   if (data.error) return <p className="text-sm text-danger">{data.error}</p>;
@@ -1202,6 +1378,34 @@ function RekapTab() {
 
   return (
     <div className="space-y-4">
+      <div className="ticket flex flex-wrap items-center gap-2 p-3">
+        {(['harian', 'bulanan', 'tahunan', 'semua'] as RekapPeriode[]).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriode(p)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize ${
+              periode === p ? 'bg-accent text-white' : 'bg-paper text-ink/60'
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+        {isSuperadmin && (
+          <select
+            value={cabangId}
+            onChange={(e) => setCabangId(e.target.value)}
+            className="ml-auto rounded-lg border border-ink/15 px-2 py-1.5 text-xs"
+          >
+            <option value="">Semua Cabang</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.nama}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
       <div className="grid grid-cols-3 gap-2">
         <div className="ticket p-3 text-center">
           <p className="text-xs text-ink/50">Total Transaksi</p>
@@ -1212,11 +1416,22 @@ function RekapTab() {
           <p className="font-display text-lg font-semibold text-ink">{data.totalMl}</p>
         </div>
         <div className="ticket p-3 text-center">
-          <p className="text-xs text-ink/50">Pendapatan</p>
+          <p className="text-xs text-ink/50">Total Pendapatan</p>
           <p className="font-display text-lg font-semibold text-ink">
             Rp{data.totalPendapatan.toLocaleString('id-ID')}
           </p>
         </div>
+      </div>
+
+      <div className="ticket space-y-2 p-4">
+        <button
+          onClick={exportExcel}
+          disabled={exporting}
+          className="w-full rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {exporting ? 'Menyiapkan file...' : `Export Data Penjualan (${periode}) ke Excel`}
+        </button>
+        {exportMsg && <p className="text-xs text-accent">{exportMsg}</p>}
       </div>
 
       <div className="ticket p-4">

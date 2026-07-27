@@ -109,6 +109,10 @@ alter table feed_comments enable row level security;
 -- Kolom deskripsi produk untuk katalog belanja (tampilan ala e-commerce)
 alter table products add column if not exists deskripsi text;
 
+-- Harga per kategori produk (biasa/sedang/mewah/series), dipakai kasir biar
+-- tinggal pilih produk dari katalog dan harga per-ml otomatis ikut kategori.
+alter table pricing_config add column if not exists category_prices jsonb not null default '[]'::jsonb;
+
 -- RLS: matikan akses publik langsung, semua akses lewat server (service key)
 alter table products enable row level security;
 alter table pricing_config enable row level security;

@@ -83,9 +83,21 @@ export type BottlePriceTier = {
   harga: number; // 5000 utk 3-35ml, 10000 utk 50-100ml
 };
 
+// Kategori harga produk katalog: dipakai supaya kasir tinggal pilih produk
+// dari katalog dan harga per-ml langsung ikut kategori produknya, tanpa
+// perlu ketik manual harga tiap kali checkout.
+export const PRODUCT_KATEGORI_LIST = ['biasa', 'sedang', 'mewah', 'series'] as const;
+export type ProductKategori = (typeof PRODUCT_KATEGORI_LIST)[number];
+
+export type CategoryPriceTier = {
+  kategori: string; // salah satu dari PRODUCT_KATEGORI_LIST
+  hargaPerMl: number;
+};
+
 export type PricingConfig = {
   mlTiers: MlPriceTier[];
   bottleTiers: BottlePriceTier[];
+  categoryPrices: CategoryPriceTier[];
   updatedAt: string;
 };
 

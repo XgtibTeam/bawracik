@@ -180,7 +180,13 @@ const DEFAULT_PRICING: PricingConfig = {
     { minMl: 36, maxMl: 100, harga: 10000 }, // botol eceran terbesar
     { minMl: 101, maxMl: 1000, harga: 25000 }, // botol grosir (jerigen dsb), harga default — silakan diedit admin
   ],
-  updatedAt: new Date(0).toISOString(),
+  categoryPrices: [
+    { kategori: 'biasa', hargaPerMl: 2000 },
+    { kategori: 'sedang', hargaPerMl: 4000 },
+    { kategori: 'mewah', hargaPerMl: 7000 },
+    { kategori: 'series', hargaPerMl: 10000 },
+  ],
+  updatedAt: new Date().toISOString(),
 };
 
 export async function getPricingConfig(): Promise<PricingConfig> {
@@ -190,7 +196,11 @@ export async function getPricingConfig(): Promise<PricingConfig> {
   return {
     mlTiers: Array.isArray(data.ml_tiers) ? data.ml_tiers : DEFAULT_PRICING.mlTiers,
     bottleTiers: Array.isArray(data.bottle_tiers) ? data.bottle_tiers : DEFAULT_PRICING.bottleTiers,
-    updatedAt: data.updated_at ?? DEFAULT_PRICING.updatedAt,
+    categoryPrices:
+      Array.isArray(data.category_prices) && data.category_prices.length > 0
+        ? data.category_prices
+        : DEFAULT_PRICING.categoryPrices,
+    updatedAt: data.updated_at,
   };
 }
 
@@ -201,11 +211,11 @@ export async function savePricingConfig(config: PricingConfig): Promise<void> {
       id: 1,
       ml_tiers: config.mlTiers,
       bottle_tiers: config.bottleTiers,
-      updated_at: new Date().toISOString(),
+      category_prices: config.categoryPrices ?? [],
+      updated_at: config.updatedAt,
     });
   if (error) throw new Error(`Gagal simpan harga: ${error.message}`);
 }
-
 // ---------- Feed member (postingan ala IG) ----------
 
 export type FeedPost = {
