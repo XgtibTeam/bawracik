@@ -216,6 +216,91 @@ export async function savePricingConfig(config: PricingConfig): Promise<void> {
     });
   if (error) throw new Error(`Gagal simpan harga: ${error.message}`);
 }
+// ---------- Stock Movements (ledger "masuk", KG->ML) ----------
+
+export async function insertStockMovement(m: import('./types').StockMovement): Promise<void> {
+  const { error } = await getClient().from('stock_movements').insert({
+    id: m.id,
+    cabang_id: m.cabangId,
+    product_id: m.productId,
+    tanggal: m.tanggal,
+    kg: m.kg,
+    ml: m.ml,
+    created_by: m.createdBy,
+    created_at: m.createdAt,
+  });
+  if (error) throw new Error(`Gagal simpan stok masuk: ${error.message}`);
+}
+
+export async function getStockMovements(filters: {
+  cabangId?: string;
+  productId?: string;
+  from?: string; // YYYY-MM-DD
+  to?: string; // YYYY-MM-DD
+}): Promise<import('./types').StockMovement[]> {
+  let query = getClient().from('stock_movements').select('*').order('tanggal', { ascending: false });
+  if (filters.cabangId) query = query.eq('cabang_id', filters.cabangId);
+  if (filters.productId) query = query.eq('product_id', filters.productId);
+  if (filters.from) query = query.gte('tanggal', filters.from);
+  if (filters.to) query = query.lte('tanggal', filters.to);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Gagal ambil stok masuk: ${error.message}`);
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    cabangId: row.cabang_id,
+    productId: row.product_id,
+    tanggal: row.tanggal,
+    kg: Number(row.kg),
+    ml: Number(row.ml),
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  }));
+}
+
+// ---------- Stock Month Snapshot (stok awal/akhir, bulanan saja) ----------
+
+export async function upsertStockMonthSnapshot(s: import('./types').StockMonthSnapshot): Promise<void> {
+  const { error } = await getClient().from('stock_month_snapshot').upsert(
+    {
+      id: s.id,
+      cabang_id: s.cabangId,
+      product_id: s.productId,
+      year_month: s.yearMonth,
+      stok_awal: s.stokAwal,
+      stok_akhir: s.stokAkhir,
+      updated_by: s.updatedBy,
+      updated_at: s.updatedAt,
+    },
+    { onConflict: 'cabang_id,product_id,year_month' }
+  );
+  if (error) throw new Error(`Gagal simpan stok awal/akhir: ${error.message}`);
+}
+
+export async function getStockMonthSnapshots(filters: {
+  cabangId?: string;
+  productId?: string;
+  yearMonth?: string;
+}): Promise<import('./types').StockMonthSnapshot[]> {
+  let query = getClient().from('stock_month_snapshot').select('*');
+  if (filters.cabangId) query = query.eq('cabang_id', filters.cabangId);
+  if (filters.productId) query = query.eq('product_id', filters.productId);
+  if (filters.yearMonth) query = query.eq('year_month', filters.yearMonth);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Gagal ambil stok awal/akhir: ${error.message}`);
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    cabangId: row.cabang_id,
+    productId: row.product_id,
+    yearMonth: row.year_month,
+    stokAwal: row.stok_awal === null ? null : Number(row.stok_awal),
+    stokAkhir: row.stok_akhir === null ? null : Number(row.stok_akhir),
+    updatedBy: row.updated_by,
+    updatedAt: row.updated_at,
+  }));
+}
+
 // ---------- Feed member (postingan ala IG) ----------
 
 export type FeedPost = {

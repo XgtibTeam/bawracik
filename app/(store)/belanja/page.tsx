@@ -252,7 +252,7 @@ export default function BelanjaPage() {
             <p className="text-sm font-semibold text-ink">Pembayaran</p>
             {profile?.pembayaran?.qrisImageUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={profile.pembayaran.qrisImageUrl} alt="QRIS" className="mt-2 w-full rounded-lg" />
+              <img src={driveImageUrl(profile.pembayaran.qrisImageUrl)} alt="QRIS" className="mt-2 w-full rounded-lg" />
             )}
             {profile?.pembayaran?.dana && <p className="mt-2 text-xs text-ink/60">DANA: {profile.pembayaran.dana}</p>}
             {profile?.pembayaran?.seabank && (

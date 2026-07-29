@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { driveImageUrl } from '@/lib/drive-url';
 
 type Branch = { id: string; nama: string; alamat?: string; waCS?: string };
 type Employee = { id: string; nama: string; username: string; role: string; cabangId: string | null };
@@ -26,7 +27,10 @@ type Voucher = { code: string; tipe: string; nilai: number; aktif: boolean };
 type HomeSection = { id: string; type: 'banner' | 'teks' | 'gambar' | 'promo'; judul?: string; isi?: string; gambarUrl?: string };
 type StoreProfile = {
   namaToko: string;
+  slogan?: string;
   deskripsi: string;
+  ctaText?: string;
+  footerText?: string;
   logoUrl: string;
   logos: string[];
   socialMedia: { instagram?: string; whatsapp?: string; tiktok?: string };
@@ -119,6 +123,11 @@ function ProfilTab() {
   return (
     <div className="ticket space-y-3 p-4">
       <Field label="Nama Toko" value={profile.namaToko} onChange={(v) => setProfile({ ...profile, namaToko: v })} />
+      <Field
+        label="Slogan (tampil di bawah nama toko)"
+        value={profile.slogan || ''}
+        onChange={(v) => setProfile({ ...profile, slogan: v })}
+      />
       <div>
         <label className="mb-1 block text-xs font-medium text-ink/60">Deskripsi</label>
         <textarea
@@ -128,6 +137,16 @@ function ProfilTab() {
           className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
         />
       </div>
+      <Field
+        label="Teks Tombol Utama (default: Mulai Belanja)"
+        value={profile.ctaText || ''}
+        onChange={(v) => setProfile({ ...profile, ctaText: v })}
+      />
+      <Field
+        label="Teks Footer (paling bawah homepage)"
+        value={profile.footerText || ''}
+        onChange={(v) => setProfile({ ...profile, footerText: v })}
+      />
       <ImageUploadField label="Logo Toko (utama)" value={profile.logoUrl} onChange={(v) => setProfile({ ...profile, logoUrl: v })} />
 
       <div>
@@ -136,7 +155,7 @@ function ProfilTab() {
           {(profile.logos || []).map((url, i) => (
             <div key={i} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt={`Logo ${i + 1}`} className="h-14 w-14 rounded-lg border border-ink/10 object-contain" />
+              <img src={driveImageUrl(url)} alt={`Logo ${i + 1}`} className="h-14 w-14 rounded-lg border border-ink/10 object-contain" />
               <button
                 onClick={() => setProfile({ ...profile, logos: profile.logos.filter((_, idx) => idx !== i) })}
                 className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-[10px] text-white"
@@ -378,7 +397,7 @@ function ImageUploadField({
       <div className="flex items-center gap-3">
         {value && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={value} alt={label} className="h-14 w-14 rounded-lg border border-ink/10 object-cover" />
+          <img src={driveImageUrl(value)} alt={label} className="h-14 w-14 rounded-lg border border-ink/10 object-cover" />
         )}
         <div className="flex-1">
           <input type="file" accept="image/*" onChange={handleFile} className="w-full text-xs" />
@@ -485,7 +504,7 @@ function KaryawanTab() {
   const [nama, setNama] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'admin' | 'kasir'>('kasir');
+  const [role, setRole] = useState<'admin' | 'kasir' | 'superadmin'>('kasir');
   const [cabangId, setCabangId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
@@ -538,26 +557,32 @@ function KaryawanTab() {
           >
             <option value="kasir">Kasir</option>
             {isSuperadmin && <option value="admin">Admin Cabang</option>}
+            {isSuperadmin && <option value="superadmin">Superadmin</option>}
           </select>
           {!isSuperadmin && (
             <p className="mt-1 text-[11px] text-ink/40">Hanya superadmin yang bisa membuat akun Admin Cabang.</p>
           )}
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-ink/60">Cabang</label>
-          <select
-            value={cabangId}
-            onChange={(e) => setCabangId(e.target.value)}
-            className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"
-          >
-            <option value="">Pilih cabang</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nama}
-              </option>
-            ))}
-          </select>
-        </div>
+        {role !== 'superadmin' && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink/60">Cabang</label>
+            <select
+              value={cabangId}
+              onChange={(e) => setCabangId(e.target.value)}
+              className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"
+            >
+              <option value="">Pilih cabang</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.nama}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {role === 'superadmin' && (
+          <p className="text-[11px] text-ink/40">Superadmin punya akses ke semua cabang, tidak perlu pilih cabang.</p>
+        )}
         {error && <p className="text-xs text-danger">{error}</p>}
         <button onClick={addEmployee} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white">
           Tambah
@@ -571,7 +596,7 @@ function KaryawanTab() {
               <span>
                 {e.nama} ({e.username}) — <span className="capitalize text-ink/50">{e.role}</span>
               </span>
-              {(isSuperadmin || e.role !== 'admin') && (
+              {(isSuperadmin || e.role === 'kasir') && (
                 <button onClick={() => deleteEmployee(e.id)} className="text-xs text-danger">
                   Hapus
                 </button>
@@ -745,7 +770,7 @@ function ProdukTab() {
               <button onClick={() => setEditing(p)} className="flex flex-1 items-center gap-2 text-left">
                 {p.imageDriveId && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.imageDriveId} alt={p.nama} className="h-8 w-8 rounded object-cover" />
+                  <img src={driveImageUrl(p.imageDriveId)} alt={p.nama} className="h-8 w-8 rounded object-cover" />
                 )}
                 <span>
                   {p.nama} <span className="text-ink/40">({p.kode})</span>
@@ -1040,17 +1065,20 @@ function VoucherTab() {
 // ============================================================
 type Session = { role: string; nama: string; cabangId: string | null; username: string };
 type Periode = 'harian' | 'bulanan' | 'tahunan';
-type StockRecap = {
-  id: string;
-  cabangId: string;
-  productId: string;
-  periode: Periode;
-  tanggal: string;
-  stokAwal: number;
-  stokAkhir: number;
-  createdBy: string;
-  createdAt: string;
-};
+
+type ProductStockUsage = { productId: string; nama: string; kode: string; masukMl: number; keluarMl: number; net: number };
+type KodeStockGroup = { kode: string; produk: ProductStockUsage[]; totalMasukMl: number; totalKeluarMl: number; totalNet: number };
+type Snapshot = { productId: string; yearMonth: string; stokAwal: number | null; stokAkhir: number | null };
+
+function stockRangeForPeriode(periode: Periode, key: string): { from: string; to: string } {
+  if (periode === 'harian') return { from: key, to: key };
+  if (periode === 'bulanan') {
+    const [y, m] = key.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    return { from: `${key}-01`, to: `${key}-${String(lastDay).padStart(2, '0')}` };
+  }
+  return { from: `${key}-01-01`, to: `${key}-12-31` };
+}
 
 function StokTab() {
   const now = new Date();
@@ -1061,19 +1089,16 @@ function StokTab() {
   const [session, setSession] = useState<Session | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [recap, setRecap] = useState<StockRecap[]>([]);
+  const [groups, setGroups] = useState<KodeStockGroup[]>([]);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [loadingRecap, setLoadingRecap] = useState(true);
 
   const [cabangId, setCabangId] = useState('');
   const [periode, setPeriode] = useState<Periode>('harian');
-  const [tanggal, setTanggal] = useState(todayStr);
-  const [productId, setProductId] = useState('');
-  const [stokAwal, setStokAwal] = useState('');
-  const [stokAkhir, setStokAkhir] = useState('');
+  const [periodeKey, setPeriodeKey] = useState(todayStr);
 
-  const [submitting, setSubmitting] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
 
   const isSuperadmin = session?.role === 'superadmin';
 
@@ -1088,68 +1113,79 @@ function StokTab() {
 
   function loadRecap() {
     if (!cabangId) {
-      setRecap([]);
+      setGroups([]);
+      setSnapshots([]);
       setLoadingRecap(false);
       return;
     }
     setLoadingRecap(true);
-    fetch(`/api/stock-recap?cabangId=${cabangId}&periode=${periode}`)
+    const { from, to } = stockRangeForPeriode(periode, periodeKey);
+    fetch(`/api/stock-summary?cabangId=${cabangId}&from=${from}&to=${to}`)
       .then((r) => r.json())
-      .then((d) => setRecap(d.recap || []))
+      .then((d) => {
+        setGroups(d.groups || []);
+        setSnapshots(d.snapshots || []);
+      })
       .finally(() => setLoadingRecap(false));
   }
-  useEffect(loadRecap, [cabangId, periode]);
+  useEffect(loadRecap, [cabangId, periode, periodeKey]);
 
   function handlePeriodeChange(p: Periode) {
     setPeriode(p);
-    setTanggal(p === 'harian' ? todayStr : p === 'bulanan' ? thisMonthStr : thisYearStr);
+    setPeriodeKey(p === 'harian' ? todayStr : p === 'bulanan' ? thisMonthStr : thisYearStr);
   }
 
-  async function submit() {
-    setError(null);
-    setMsg(null);
-    if (!cabangId) return setError('Pilih cabang dulu.');
-    if (!productId) return setError('Pilih produk dulu.');
-    if (stokAwal === '' || stokAkhir === '') return setError('Isi stok awal dan stok akhir.');
-
-    setSubmitting(true);
-    try {
-      const res = await fetch('/api/stock-recap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cabangId,
-          productId,
-          periode,
-          tanggal,
-          stokAwal: Number(stokAwal),
-          stokAkhir: Number(stokAkhir),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan rekap stok');
-      setMsg('Rekap stok tersimpan.');
-      setStokAwal('');
-      setStokAkhir('');
-      loadRecap();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function namaProduk(id: string) {
-    return products.find((p) => p.id === id)?.nama || id;
-  }
   function namaCabang(id: string) {
     return branches.find((b) => b.id === id)?.nama || id;
+  }
+
+  function snapshotFor(productId: string) {
+    return snapshots.find((s) => s.productId === productId);
+  }
+
+  function exportStokExcel() {
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      const wb = XLSX.utils.book_new();
+      const label = periode === 'harian' ? 'Harian' : periode === 'bulanan' ? 'Bulanan' : 'Tahunan';
+      for (const g of groups) {
+        const aoa: any[][] = [['Nama Parfum', 'IN (ml)', 'OUT (ml)', 'Selisih (ml)']];
+        for (const p of g.produk) {
+          aoa.push([p.nama, p.masukMl, p.keluarMl, p.net]);
+        }
+        aoa.push(['TOTAL', g.totalMasukMl, g.totalKeluarMl, g.totalNet]);
+        if (periode !== 'harian') {
+          aoa.push([]);
+          aoa.push(['Nama Parfum', 'Stok Awal (ml)', 'Stok Akhir (ml)']);
+          for (const p of g.produk) {
+            const snap = snapshotFor(p.productId);
+            aoa.push([p.nama, snap?.stokAwal ?? '-', snap?.stokAkhir ?? '-']);
+          }
+        }
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        const cleanName = `Kode-${g.kode}`.replace(/[:\\/?*[\]]/g, '').slice(0, 31);
+        XLSX.utils.book_append_sheet(wb, ws, cleanName || 'Kode');
+      }
+      if (groups.length === 0) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Tidak ada pergerakan stok di periode ini']]), 'Kosong');
+      }
+      XLSX.writeFile(wb, `Rekap-Stok-${label}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      setExportMsg('Berhasil export rekap stok.');
+    } catch (err: any) {
+      setExportMsg(err.message);
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
     <div className="space-y-4">
       <div className="ticket space-y-3 p-4">
-        <h2 className="font-display text-sm font-semibold text-ink">Input Rekap Stok</h2>
+        <h2 className="font-display text-sm font-semibold text-ink">Rekap Stok per Kode Produk</h2>
+        <p className="-mt-1 text-[11px] text-ink/40">
+          IN = stok masuk (input KG dikonversi ML oleh admin/kasir cabang). OUT = otomatis dari penjualan harian.
+        </p>
 
         {isSuperadmin && (
           <div>
@@ -1183,99 +1219,83 @@ function StokTab() {
           ))}
         </div>
 
-        <div>
-          <label className="mb-1 block text-xs font-medium text-ink/60">Produk</label>
-          <select
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
+        {periode === 'harian' && (
+          <input
+            type="date"
+            value={periodeKey}
+            onChange={(e) => setPeriodeKey(e.target.value)}
             className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-          >
-            <option value="">Pilih produk</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nama} ({p.kode})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium text-ink/60">
-            {periode === 'harian' ? 'Tanggal' : periode === 'bulanan' ? 'Bulan' : 'Tahun'}
-          </label>
-          {periode === 'harian' && (
-            <input
-              type="date"
-              value={tanggal}
-              onChange={(e) => setTanggal(e.target.value)}
-              className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-            />
-          )}
-          {periode === 'bulanan' && (
-            <input
-              type="month"
-              value={tanggal}
-              onChange={(e) => setTanggal(e.target.value)}
-              className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-            />
-          )}
-          {periode === 'tahunan' && (
-            <input
-              type="number"
-              value={tanggal}
-              onChange={(e) => setTanggal(e.target.value)}
-              placeholder="mis. 2026"
-              className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-            />
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Stok Awal" value={stokAwal} onChange={setStokAwal} />
-          <Field label="Stok Akhir" value={stokAkhir} onChange={setStokAkhir} />
-        </div>
-
-        {error && <p className="text-xs text-danger">{error}</p>}
-        {msg && <p className="text-xs text-accent">{msg}</p>}
+          />
+        )}
+        {periode === 'bulanan' && (
+          <input
+            type="month"
+            value={periodeKey}
+            onChange={(e) => setPeriodeKey(e.target.value)}
+            className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+          />
+        )}
+        {periode === 'tahunan' && (
+          <input
+            type="number"
+            value={periodeKey}
+            onChange={(e) => setPeriodeKey(e.target.value)}
+            placeholder="mis. 2026"
+            className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+          />
+        )}
 
         <button
-          onClick={submit}
-          disabled={submitting}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          onClick={exportStokExcel}
+          disabled={exporting || !cabangId}
+          className="w-full rounded-lg bg-ink/90 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {submitting ? 'Menyimpan...' : 'Simpan Rekap Stok'}
+          {exporting ? 'Membuat file...' : `Export Excel Rekap Stok (${namaCabang(cabangId) || '-'})`}
         </button>
+        {exportMsg && <p className="text-xs text-accent">{exportMsg}</p>}
       </div>
 
       <div className="ticket p-4">
-        <h2 className="font-display text-sm font-semibold text-ink">Riwayat Rekap ({periode})</h2>
-        {loadingRecap && <p className="mt-2 text-xs text-ink/50">Memuat...</p>}
-        {!loadingRecap && recap.length === 0 && (
-          <p className="mt-2 text-xs text-ink/40">Belum ada rekap untuk periode & cabang ini.</p>
+        {loadingRecap && <p className="text-xs text-ink/50">Memuat...</p>}
+        {!loadingRecap && groups.length === 0 && (
+          <p className="text-xs text-ink/40">Belum ada pergerakan stok (masuk/keluar) untuk cabang & periode ini.</p>
         )}
-        <ul className="mt-2 divide-y divide-ink/10 text-sm">
-          {recap.map((r) => (
-            <li key={r.id} className="py-2">
-              <div className="flex justify-between">
-                <span className="font-medium text-ink">{namaProduk(r.productId)}</span>
-                <span className="text-ink/50">{r.tanggal}</span>
+        <div className="space-y-3">
+          {!loadingRecap &&
+            groups.map((g) => (
+              <div key={g.kode} className="rounded-lg border border-ink/10 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-display text-xs font-semibold text-ink">Kode: {g.kode}</span>
+                  <span className={`text-xs font-semibold ${g.totalNet < 0 ? 'text-danger' : 'text-accent'}`}>
+                    Net {g.totalNet.toLocaleString('id-ID')} ml
+                  </span>
+                </div>
+                <table className="mt-2 w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-ink/40">
+                      <th className="pb-1 font-normal">Nama Parfum</th>
+                      <th className="pb-1 text-right font-normal">IN</th>
+                      <th className="pb-1 text-right font-normal">OUT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.produk.map((p) => (
+                      <tr key={p.productId} className="border-t border-ink/5">
+                        <td className="py-1 text-ink">{p.nama}</td>
+                        <td className="py-1 text-right text-accent">+{p.masukMl.toLocaleString('id-ID')}</td>
+                        <td className="py-1 text-right text-danger">-{p.keluarMl.toLocaleString('id-ID')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="mt-0.5 flex justify-between text-xs text-ink/60">
-                <span>
-                  Awal: {r.stokAwal} → Akhir: {r.stokAkhir} (terpakai {r.stokAwal - r.stokAkhir})
-                </span>
-                <span>
-                  {isSuperadmin ? `${namaCabang(r.cabangId)} · ` : ''}
-                  oleh {r.createdBy}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
+            ))}
+        </div>
       </div>
     </div>
   );
 }
+
 
 // ============================================================
 type RekapPeriode = 'harian' | 'bulanan' | 'tahunan' | 'semua';
@@ -1323,6 +1343,21 @@ function RekapTab() {
       .then(setData);
   }, [periode, cabangId, isSuperadmin]);
 
+  // Nama sheet Excel max 31 karakter & tidak boleh mengandung : \ / ? * [ ]
+  function sheetName(prefix: string, raw: string, used: Set<string>): string {
+    const cleaned = raw.replace(/[:\\/?*[\]]/g, '').trim() || 'Tanpa Nama';
+    let base = `${prefix}-${cleaned}`.slice(0, 31);
+    let name = base;
+    let i = 2;
+    while (used.has(name)) {
+      const suffix = ` (${i})`;
+      name = base.slice(0, 31 - suffix.length) + suffix;
+      i += 1;
+    }
+    used.add(name);
+    return name;
+  }
+
   async function exportExcel() {
     setExporting(true);
     setExportMsg(null);
@@ -1337,33 +1372,68 @@ function RekapTab() {
       if (!res.ok) throw new Error(exportData.error || 'Export gagal');
 
       const wb = XLSX.utils.book_new();
-      const rows = exportData.rows.map((r: any) => ({
-        Tanggal: new Date(r.tanggal).toLocaleString('id-ID'),
-        'ID Transaksi': r.transaksiId,
-        Cabang: r.cabang,
-        Kasir: r.kasir,
-        Tipe: r.tipe,
-        Produk: r.produk,
-        Ml: r.ml,
-        'Harga/ml': r.hargaPerMl,
-        Subtotal: r.subtotal,
-        Voucher: r.voucher,
-        'Total Transaksi': r.totalTransaksi,
-      }));
-      const ws = XLSX.utils.json_to_sheet(rows);
-      XLSX.utils.book_append_sheet(wb, ws, 'Penjualan');
+      const usedSheetNames = new Set<string>();
 
+      // ---- Sheet Ringkasan ----
+      const label = periode === 'harian' ? 'Harian' : periode === 'bulanan' ? 'Bulanan' : periode === 'tahunan' ? 'Tahunan' : 'Semua';
       const ringkasan = XLSX.utils.json_to_sheet([
+        { Keterangan: 'Periode', Nilai: label },
         { Keterangan: 'Total Transaksi', Nilai: exportData.totalTransaksi },
         { Keterangan: 'Total Ml', Nilai: exportData.totalMl },
         { Keterangan: 'Total Pendapatan', Nilai: exportData.totalPendapatan },
-        { Keterangan: 'By', Nilai: 'Toko Vorie' },
       ]);
-      XLSX.utils.book_append_sheet(wb, ringkasan, 'Ringkasan');
+      XLSX.utils.book_append_sheet(wb, ringkasan, sheetName('', 'Ringkasan', usedSheetNames));
 
-      const label = periode === 'harian' ? 'Harian' : periode === 'bulanan' ? 'Bulanan' : periode === 'tahunan' ? 'Tahunan' : 'Semua';
-      XLSX.writeFile(wb, `Data-Penjualan-${label}-${new Date().toISOString().slice(0, 10)}.xlsx`);
-      setExportMsg(`Berhasil export ${rows.length} baris.`);
+      // ---- 1 sheet per kode produk ----
+      // Baris = tanggal + nama parfum + total ml + total rupiah hari itu,
+      // ditutup blok TOTAL per nama parfum (rekap keseluruhan periode).
+      for (const kodeGroup of exportData.perKode || []) {
+        const aoa: any[][] = [['Tanggal', 'Nama Parfum', 'Total Ml', 'Total Pendapatan']];
+        for (const r of kodeGroup.rows) {
+          aoa.push([r.tanggal, r.parfum, r.totalMl, r.totalRupiah]);
+        }
+        aoa.push([]);
+        aoa.push(['TOTAL PER NAMA PARFUM (semua tanggal)']);
+        aoa.push(['Nama Parfum', 'Total Ml Terjual', 'Total Pendapatan']);
+        let grandMl = 0;
+        let grandRp = 0;
+        for (const s of kodeGroup.subtotal) {
+          aoa.push([s.parfum, s.totalMl, s.totalRupiah]);
+          grandMl += s.totalMl;
+          grandRp += s.totalRupiah;
+        }
+        aoa.push(['TOTAL', grandMl, grandRp]);
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName('Kode', kodeGroup.kode, usedSheetNames));
+      }
+
+      // ---- 1 sheet per karyawan ----
+      // Baris detail tiap transaksi (semua kode produk digabung), ditutup
+      // blok TOTAL per nama parfum untuk karyawan itu.
+      for (const kGroup of exportData.perKaryawan || []) {
+        const aoa: any[][] = [['Tanggal', 'Cabang', 'Tipe', 'Nama Parfum', 'Ml', 'Harga/ml', 'Subtotal']];
+        for (const r of kGroup.rows) {
+          aoa.push([r.tanggal, r.cabang, r.tipe, r.parfum, r.ml, r.hargaPerMl, r.subtotal]);
+        }
+        aoa.push([]);
+        aoa.push(['TOTAL PENJUALAN PER NAMA PARFUM (semua kode produk digabung)']);
+        aoa.push(['Nama Parfum', 'Total Ml Terjual', 'Total Pendapatan']);
+        let grandMl = 0;
+        let grandRp = 0;
+        for (const s of kGroup.subtotal) {
+          aoa.push([s.parfum, s.totalMl, s.totalRupiah]);
+          grandMl += s.totalMl;
+          grandRp += s.totalRupiah;
+        }
+        aoa.push(['TOTAL', grandMl, grandRp]);
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName('', kGroup.karyawan, usedSheetNames));
+      }
+
+      XLSX.writeFile(wb, `Rekap-Penjualan-${label}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      setExportMsg(`Berhasil export: ${(exportData.perKode || []).length} sheet kode produk, ${(exportData.perKaryawan || []).length} sheet karyawan.`);
     } catch (err: any) {
       setExportMsg(err.message);
     } finally {

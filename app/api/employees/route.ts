@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const nama = (body?.nama || '').trim();
     const username = (body?.username || '').trim();
     const password = body?.password || '';
-    let role = body?.role as 'admin' | 'kasir';
+    let role = body?.role as 'admin' | 'kasir' | 'superadmin';
     let cabangId = body?.cabangId ? String(body.cabangId) : null;
 
     if (!nama || !username || !password || !role) {
@@ -42,23 +42,27 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (!['admin', 'kasir'].includes(role)) {
+    if (!['admin', 'kasir', 'superadmin'].includes(role)) {
       return NextResponse.json({ error: 'Role tidak valid' }, { status: 400 });
     }
 
-    // Hirarki: admin biasa CUMA boleh bikin akun kasir (karyawan), tidak boleh
-    // bikin akun admin lain. Cuma superadmin yang boleh bikin akun admin.
+    // Hirarki:
+    // - Admin biasa CUMA boleh bikin akun kasir (karyawan) untuk cabangnya sendiri.
+    // - Cuma superadmin yang boleh bikin akun admin ATAU superadmin baru.
     if (session.role === 'admin') {
-      if (role === 'admin') {
+      if (role !== 'kasir') {
         return NextResponse.json(
-          { error: 'Hanya superadmin yang boleh membuat akun admin' },
+          { error: 'Hanya superadmin yang boleh membuat akun admin/superadmin' },
           { status: 403 }
         );
       }
-      role = 'kasir';
       cabangId = session.cabangId;
     }
-    if (!cabangId) {
+    if (role === 'superadmin') {
+      // Superadmin tidak terikat cabang tertentu (akses semua cabang).
+      cabangId = null;
+    }
+    if (role !== 'superadmin' && !cabangId) {
       return NextResponse.json({ error: 'Cabang wajib dipilih' }, { status: 400 });
     }
 
@@ -104,8 +108,8 @@ export async function DELETE(req: NextRequest) {
     if (session.role === 'admin' && target.cabangId !== session.cabangId) {
       return NextResponse.json({ error: 'Tidak bisa hapus karyawan cabang lain' }, { status: 403 });
     }
-    if (session.role === 'admin' && target.role === 'admin') {
-      return NextResponse.json({ error: 'Hanya superadmin yang boleh menghapus akun admin' }, { status: 403 });
+    if (session.role === 'admin' && target.role !== 'kasir') {
+      return NextResponse.json({ error: 'Hanya superadmin yang boleh menghapus akun admin/superadmin' }, { status: 403 });
     }
 
     const updated = employees.filter((e) => e.id !== id);

@@ -1,15 +1,17 @@
 import { getStoreProfile } from '@/lib/jsonbin';
+import { driveImageUrl } from '@/lib/drive-url';
 
 export default async function HomePage() {
   const profile = await getStoreProfile();
+  const logoSrc = driveImageUrl(profile.logoUrl);
 
   return (
     <main className="mx-auto max-w-md px-4 py-8">
       <div className="ticket p-6 text-center">
-        {profile.logoUrl ? (
+        {logoSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={profile.logoUrl}
+            src={logoSrc}
             alt={profile.namaToko}
             className="mx-auto h-24 w-24 rounded-full object-cover"
           />
@@ -21,6 +23,9 @@ export default async function HomePage() {
         <h1 className="mt-4 font-display text-2xl font-semibold text-ink">
           {profile.namaToko || 'Biang Aroma X Me.Racik Parfum'}
         </h1>
+        {profile.slogan && (
+          <p className="mt-1 text-sm font-medium italic text-accent">{profile.slogan}</p>
+        )}
         <p className="mt-2 whitespace-pre-line text-sm text-ink/60">
           {profile.deskripsi || 'Toko parfum isi ulang dengan sistem member & poin.'}
         </p>
@@ -63,14 +68,14 @@ export default async function HomePage() {
         href="/belanja"
         className="mt-4 block rounded-card bg-accent px-4 py-3 text-center text-sm font-semibold text-white hover:opacity-90"
       >
-        Mulai Belanja
+        {profile.ctaText || 'Mulai Belanja'}
       </a>
 
       {profile.logos && profile.logos.length > 0 && (
         <div className="ticket mt-4 flex flex-wrap items-center justify-center gap-3 p-4">
           {profile.logos.map((url, i) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={url} alt={`${profile.namaToko} logo ${i + 1}`} className="h-12 w-12 object-contain" />
+            <img key={i} src={driveImageUrl(url)} alt={`${profile.namaToko} logo ${i + 1}`} className="h-12 w-12 object-contain" />
           ))}
         </div>
       )}
@@ -79,7 +84,7 @@ export default async function HomePage() {
         <div key={s.id} className="ticket mt-4 overflow-hidden">
           {(s.type === 'banner' || s.type === 'gambar') && s.gambarUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={s.gambarUrl} alt={s.judul || ''} className="w-full object-cover" />
+            <img src={driveImageUrl(s.gambarUrl)} alt={s.judul || ''} className="w-full object-cover" />
           )}
           {(s.judul || s.isi) && (
             <div className="p-4">
@@ -90,7 +95,9 @@ export default async function HomePage() {
         </div>
       ))}
 
-      <p className="mt-8 pb-2 text-center text-[11px] text-ink/25">BAW Group — Biang Aroma Wangi × Me.Racik × Racik Parfum</p>
+      <p className="mt-8 pb-2 text-center text-[11px] text-ink/25">
+        {profile.footerText || 'BAW Group — Biang Aroma Wangi × Me.Racik × Racik Parfum'}
+      </p>
     </main>
   );
 }

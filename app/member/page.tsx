@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Heart, MapPin, Plus, X, Trash2 } from 'lucide-react';
 import CameraCapture from '@/components/CameraCapture';
+import { driveImageUrl } from '@/lib/drive-url';
 
 type Session = { nama: string; username: string; role: string };
 type Branch = { id: string; nama: string };
@@ -18,10 +19,6 @@ type FeedPost = {
   likes: string[];
   createdAt: string;
 };
-
-function driveUrl(fileId: string) {
-  return `https://drive.google.com/uc?export=view&id=${fileId}`;
-}
 
 function waktuRelatif(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -228,7 +225,7 @@ export default function MemberFeedPage() {
 
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={driveUrl(post.photoDriveId)}
+                  src={driveImageUrl(post.photoDriveId)}
                   alt="Postingan feed"
                   className="aspect-square w-full object-cover"
                   loading="lazy"

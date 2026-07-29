@@ -52,7 +52,10 @@ export type HomeSection = {
 
 export type StoreProfile = {
   namaToko: string; // "Biang Aroma X Me.Racik Parfum"
+  slogan?: string; // tagline pendek, tampil di bawah nama toko
   deskripsi: string;
+  ctaText?: string; // teks tombol utama di homepage (default: "Mulai Belanja")
+  footerText?: string; // teks kecil di paling bawah homepage
   logoUrl: string; // Google Drive file id atau URL — logo utama (kompatibilitas lama)
   logos: string[]; // logo tambahan (bisa lebih dari satu), URL Google Drive
   socialMedia: {
@@ -183,6 +186,11 @@ export type Transaction = {
 };
 
 // ---------- REKAP STOK (Supabase table: stock_recap) ----------
+// CATATAN: model lama (stokAwal/stokAkhir polos per record) sudah digantikan
+// StockMovement + StockMonthSnapshot di bawah (revisi: input stok pakai KG
+// dikonversi ML, bergerak berdasar penjualan harian, stok awal/akhir cuma
+// utk bulanan/tahunan). Type ini dipertahankan supaya data lama & endpoint
+// lama tidak error kalau masih ada yang baca, tapi UI baru tidak pakai ini.
 
 export type StockRecap = {
   id: string;
@@ -194,4 +202,39 @@ export type StockRecap = {
   stokAkhir: number;
   createdBy: string; // employee id
   createdAt: string;
+};
+
+// ---------- STOK MASUK / LEDGER (Supabase table: stock_movements) ----------
+// Setiap kali admin/kasir cabang input stok baru datang, dicatat di sini
+// sebagai penambahan ("masuk"). Admin cabang HANYA input berapa KG — sistem
+// yang mengonversi ke ML (1kg = 1000ml) untuk semua perhitungan turunannya
+// (rekap harian/bulanan/tahunan pakai ML). "Keluar" TIDAK dicatat manual di
+// sini — keluar dihitung otomatis dari total ml terjual (Supabase
+// transactions) pada tanggal & produk yang sama.
+export type StockMovement = {
+  id: string;
+  cabangId: string;
+  productId: string;
+  tanggal: string; // YYYY-MM-DD, hari stok ini masuk
+  kg: number; // input asli oleh admin/kasir cabang
+  ml: number; // kg * 1000, dipakai di semua rekap
+  createdBy: string; // username staff yang input
+  createdAt: string;
+};
+
+// ---------- STOK AWAL/AKHIR BULANAN (Supabase table: stock_month_snapshot) ----------
+// SENGAJA cuma ada level bulanan & tahunan (tahunan = snapshot bulan
+// pertama & terakhir tahun itu), TIDAK ada harian. stokAwal boleh diisi
+// kapan saja di awal bulan, stokAkhir boleh diisi kapan saja di akhir
+// bulan (tidak harus pas tanggal 1 / akhir bulan persis) — dipakai untuk
+// cross-check otomatis berapa minus/lebihnya stok riil vs catatan sistem.
+export type StockMonthSnapshot = {
+  id: string; // `${cabangId}:${productId}:${yearMonth}`
+  cabangId: string;
+  productId: string;
+  yearMonth: string; // YYYY-MM
+  stokAwal: number | null; // dalam ML
+  stokAkhir: number | null; // dalam ML
+  updatedBy: string;
+  updatedAt: string;
 };

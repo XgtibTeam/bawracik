@@ -164,7 +164,10 @@ export async function saveEmployees(employees: Employee[]): Promise<void> {
 
 const DEFAULT_STORE_PROFILE: StoreProfile = {
   namaToko: 'Biang Aroma X Me.Racik Parfum',
+  slogan: '',
   deskripsi: '',
+  ctaText: 'Mulai Belanja',
+  footerText: 'BAW Group — Biang Aroma Wangi × Me.Racik × Racik Parfum',
   logoUrl: '',
   logos: [],
   socialMedia: {},
@@ -180,6 +183,9 @@ export async function getStoreProfile(): Promise<StoreProfile> {
     ...profile,
     homeSections: profile.homeSections ?? [],
     logos: Array.isArray(profile.logos) ? profile.logos : [],
+    slogan: profile.slogan ?? '',
+    ctaText: profile.ctaText || 'Mulai Belanja',
+    footerText: profile.footerText || 'BAW Group — Biang Aroma Wangi × Me.Racik × Racik Parfum',
   };
 }
 export async function saveStoreProfile(profile: StoreProfile): Promise<void> {

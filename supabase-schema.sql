@@ -122,3 +122,37 @@ alter table feed_posts enable row level security;
 alter table transactions enable row level security;
 alter table stock_recap enable row level security;
 -- Tidak ada policy dibuat -> hanya service_role key (dipakai server) yang bisa akses.
+
+-- ============================================================
+-- REVISI STOK: ledger "masuk" (KG dikonversi ML) + snapshot stok awal/akhir
+-- bulanan. Menggantikan pemakaian tabel stock_recap lama di UI (tabel lama
+-- dibiarkan ada, tidak dihapus, supaya data lama tidak hilang).
+-- ============================================================
+
+create table if not exists stock_movements (
+  id text primary key,
+  cabang_id text not null,
+  product_id text not null,
+  tanggal date not null,          -- hari stok ini masuk
+  kg numeric not null,            -- input asli admin/kasir cabang, dalam KG
+  ml numeric not null,            -- kg * 1000, dipakai di semua rekap
+  created_by text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_stock_movements_cabang_product on stock_movements (cabang_id, product_id, tanggal);
+alter table stock_movements enable row level security;
+
+create table if not exists stock_month_snapshot (
+  id text primary key,            -- `${cabangId}:${productId}:${yearMonth}`
+  cabang_id text not null,
+  product_id text not null,
+  year_month text not null,       -- YYYY-MM
+  stok_awal numeric,              -- ML, opsional, diisi awal bulan
+  stok_akhir numeric,             -- ML, opsional, diisi akhir bulan
+  updated_by text not null,
+  updated_at timestamptz not null default now(),
+  unique (cabang_id, product_id, year_month)
+);
+create index if not exists idx_stock_snapshot_cabang_product on stock_month_snapshot (cabang_id, product_id, year_month);
+alter table stock_month_snapshot enable row level security;
+-- Tidak ada policy dibuat -> hanya service_role key (dipakai server) yang bisa akses.

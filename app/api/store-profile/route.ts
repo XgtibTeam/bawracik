@@ -24,7 +24,10 @@ export async function POST(req: NextRequest) {
     const updated = {
       ...current,
       namaToko: body?.namaToko ?? current.namaToko,
+      slogan: body?.slogan ?? current.slogan,
       deskripsi: body?.deskripsi ?? current.deskripsi,
+      ctaText: body?.ctaText ?? current.ctaText,
+      footerText: body?.footerText ?? current.footerText,
       logoUrl: body?.logoUrl ?? current.logoUrl,
       logos: Array.isArray(body?.logos) ? body.logos : current.logos,
       socialMedia: { ...current.socialMedia, ...(body?.socialMedia ?? {}) },

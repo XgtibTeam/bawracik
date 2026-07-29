@@ -1,17 +1,28 @@
 // Helper murni (tidak menyentuh env/server) buat dipakai di komponen client
 // mana pun yang perlu menampilkan foto publik dari Google Drive (foto produk,
-// foto feed, logo toko). imageDriveId yang tersimpan di database CUMA berupa
-// ID file Drive, BUKAN URL siap pakai — jadi tidak boleh langsung dipasang ke
-// <img src={idNya}>, harus lewat helper ini dulu.
-export function driveImageUrl(fileId?: string | null): string | undefined {
-  if (!fileId) return undefined;
-  // Kalau yang tersimpan ternyata sudah berupa URL penuh (data lama / kasus
-  // lain), pakai apa adanya supaya tidak dobel-format.
-  if (fileId.startsWith('http')) return fileId;
-  // PENTING: format "uc?export=view" SERING gagal tampil kalau dipasang
-  // langsung di <img src> — Google kadang mengembalikan halaman HTML
-  // "konfirmasi download" alih-alih bytes gambar, jadi <img> tampil
-  // rusak/patah (ini penyebab foto feed tidak muncul). Format "thumbnail"
-  // jauh lebih stabil untuk dipasang langsung sebagai <img src>.
-  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+// foto feed, logo toko). Apapun format lama yang tersimpan (ID mentah, URL
+// "uc?export=view", URL "thumbnail?id=") dikonversi ke satu bentuk yang
+// SELALU stabil: proxy kita sendiri di /api/public-image/:id, yang mengambil
+// bytes gambar lewat Drive API server-side (bukan hotlink langsung ke Google
+// yang sering diblokir/gagal tampil).
+export function driveImageUrl(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  // Sudah dalam bentuk proxy kita — pakai apa adanya.
+  if (trimmed.startsWith('/api/public-image/')) return trimmed;
+
+  // Coba ekstrak file ID dari berbagai format URL Google Drive yang lama.
+  const idParamMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  const dSlashMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  const driveId = idParamMatch?.[1] || dSlashMatch?.[1];
+  if (driveId) return `/api/public-image/${driveId}`;
+
+  // URL http lain yang bukan format Drive dikenal (mis. link gambar
+  // eksternal yang ditempel manual admin) — tampilkan apa adanya.
+  if (trimmed.startsWith('http')) return trimmed;
+
+  // Selain itu anggap ini ID file Drive mentah.
+  return `/api/public-image/${trimmed}`;
 }

@@ -153,7 +153,15 @@ export async function uploadPublicImage(
   const { path: fileId } = await uploadPhotoToDrive(base64DataUrl, filename, folder);
   const accessToken = await getAccessToken();
   await makeFilePublic(fileId, accessToken);
-  return { fileId, url: `https://drive.google.com/uc?export=view&id=${fileId}` };
+  // PENTING: dulu di sini dikembalikan URL langsung Google
+  // ("https://drive.google.com/uc?export=view&id=...") untuk dipasang di
+  // <img src>. Format itu TIDAK RELIABLE — Google sering memblokir
+  // hotlink/menampilkan halaman konfirmasi alih-alih gambar, ini penyebab
+  // utama logo/katalog/foto tidak muncul di production. Sekarang kita
+  // kembalikan URL proxy kita sendiri (/api/public-image/:id) yang selalu
+  // mengambil bytes gambar lewat Drive API server-side lalu meneruskannya
+  // — jadi tidak bergantung sama sekali pada perilaku hotlink Google.
+  return { fileId, url: `/api/public-image/${fileId}` };
 }
 
 export async function listPhotos(folder: DriveFolder = 'attendance'): Promise<PhotoListItem[]> {
@@ -197,7 +205,12 @@ export async function listPhotos(folder: DriveFolder = 'attendance'): Promise<Ph
 // paling aman untuk preview di panel admin adalah server mengambil bytes
 // foto lewat OAuth akun Gmail lalu mengembalikannya sebagai data URL
 // (base64) — jadi link Drive-nya sendiri tidak pernah perlu dibuka publik.
-export async function getPhotoDataUrl(fileId: string): Promise<string> {
+/**
+ * Ambil bytes + mime type asli sebuah file Drive lewat OAuth server-side.
+ * Dipakai baik untuk preview privat (getPhotoDataUrl, foto absensi) maupun
+ * untuk proxy gambar publik (/api/public-image/[id], logo/katalog/feed).
+ */
+export async function getPhotoBuffer(fileId: string): Promise<{ buffer: Buffer; mimeType: string }> {
   const accessToken = await getAccessToken();
 
   const metaRes = await fetch(`${DRIVE_API}/files/${fileId}?fields=mimeType,name`, {
@@ -218,6 +231,10 @@ export async function getPhotoDataUrl(fileId: string): Promise<string> {
     throw new Error(`Gagal memuat foto: ${await mediaRes.text()}`);
   }
   const arrayBuffer = await mediaRes.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString('base64');
-  return `data:${mimeType};base64,${base64}`;
+  return { buffer: Buffer.from(arrayBuffer), mimeType };
+}
+
+export async function getPhotoDataUrl(fileId: string): Promise<string> {
+  const { buffer, mimeType } = await getPhotoBuffer(fileId);
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
 }
