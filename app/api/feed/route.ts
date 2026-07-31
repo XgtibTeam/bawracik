@@ -1,0 +1,96 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
+import { getFeedPosts, createFeedPost, deleteFeedPost, deleteFeedPostByAdmin, countFeedComments } from '@/lib/supabase';
+import { uploadPublicImage } from '@/lib/google-drive';
+import { getBranches } from '@/lib/jsonbin';
+
+// Route ini SELALU dijalankan dinamis (bukan di-cache statis Next.js) —
+// tanpa ini, data baru (mis. feed/produk/harga terbaru) bisa 'macet' di
+// snapshot lama sampai redeploy, karena Next.js App Router men-static-kan
+// Route Handler GET yang tidak baca cookies/searchParams.
+export const dynamic = 'force-dynamic';
+
+export async function GET() {
+  try {
+    const posts = await getFeedPosts(100);
+    const commentCounts = await countFeedComments(posts.map((p) => p.id));
+    return NextResponse.json({ posts, commentCounts });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+// Body: { photoBase64, deskripsi, cabangId? } (lokasi dari daftar cabang)
+//   ATAU { photoBase64, deskripsi, lat, lng } (lokasi otomatis dari GPS)
+export async function POST(req: NextRequest) {
+  try {
+    const session = await verifySessionToken(req.cookies.get(SESSION_COOKIE_NAME)?.value);
+    if (!session || session.role !== 'member') {
+      return NextResponse.json({ error: 'Khusus member, silakan masuk dulu' }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const photoBase64 = body?.photoBase64;
+    const deskripsi = (body?.deskripsi || '').trim();
+    const cabangId = body?.cabangId ? String(body.cabangId) : undefined;
+    const lat = body?.lat;
+    const lng = body?.lng;
+
+    if (!photoBase64) {
+      return NextResponse.json({ error: 'Foto wajib diisi' }, { status: 400 });
+    }
+
+    let cabangNama: string | undefined;
+    if (cabangId) {
+      const branches = await getBranches();
+      cabangNama = branches.find((b) => b.id === cabangId)?.nama;
+    }
+
+    let lokasiAuto: string | undefined;
+    if (!cabangId && typeof lat === 'number' && typeof lng === 'number') {
+      lokasiAuto = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    }
+
+    const filename = `feed-${session.username}-${Date.now()}.jpg`;
+    const { fileId } = await uploadPublicImage(photoBase64, filename, 'feed');
+
+    const post = await createFeedPost({
+      id: randomUUID(),
+      memberId: session.username,
+      memberNama: session.nama,
+      photoDriveId: fileId,
+      deskripsi,
+      cabangId,
+      cabangNama,
+      lokasiAuto,
+    });
+
+    return NextResponse.json({ post });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await verifySessionToken(req.cookies.get(SESSION_COOKIE_NAME)?.value);
+    const body = await req.json();
+    const id = body?.id;
+    if (!id) return NextResponse.json({ error: 'id wajib diisi' }, { status: 400 });
+
+    if (session && ['superadmin', 'admin'].includes(session.role)) {
+      // Moderasi: admin/superadmin boleh hapus feed siapa saja.
+      await deleteFeedPostByAdmin(id);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (!session || session.role !== 'member') {
+      return NextResponse.json({ error: 'Khusus member, silakan masuk dulu' }, { status: 401 });
+    }
+    await deleteFeedPost(id, session.username);
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
