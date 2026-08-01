@@ -69,6 +69,7 @@ export type StoreProfile = {
     seabank?: string;
   };
   homeSections: HomeSection[]; // section homepage, urutan & isi diatur admin
+  colorScheme?: 'hijau' | 'maroon'; // skema warna situs, diatur admin (berlaku utk semua pengunjung)
   updatedAt: string;
 };
 

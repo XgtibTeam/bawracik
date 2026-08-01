@@ -173,6 +173,7 @@ const DEFAULT_STORE_PROFILE: StoreProfile = {
   socialMedia: {},
   pembayaran: {},
   homeSections: [],
+  colorScheme: 'hijau',
   updatedAt: new Date(0).toISOString(),
 };
 
@@ -186,6 +187,7 @@ export async function getStoreProfile(): Promise<StoreProfile> {
     slogan: profile.slogan ?? '',
     ctaText: profile.ctaText || 'Mulai Belanja',
     footerText: profile.footerText || 'BAW Group — Biang Aroma Wangi × Me.Racik × Racik Parfum',
+    colorScheme: profile.colorScheme === 'maroon' ? 'maroon' : 'hijau',
   };
 }
 export async function saveStoreProfile(profile: StoreProfile): Promise<void> {

@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       socialMedia: { ...current.socialMedia, ...(body?.socialMedia ?? {}) },
       pembayaran: { ...current.pembayaran, ...(body?.pembayaran ?? {}) },
       homeSections: Array.isArray(body?.homeSections) ? body.homeSections : current.homeSections,
+      colorScheme: body?.colorScheme === 'maroon' ? 'maroon' : body?.colorScheme === 'hijau' ? 'hijau' : current.colorScheme,
     };
     await saveStoreProfile(updated);
     return NextResponse.json({ profile: updated });

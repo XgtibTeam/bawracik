@@ -36,6 +36,7 @@ type StoreProfile = {
   socialMedia: { instagram?: string; whatsapp?: string; tiktok?: string };
   pembayaran: { qrisImageUrl?: string; dana?: string; seabank?: string };
   homeSections: HomeSection[];
+  colorScheme?: 'hijau' | 'maroon';
 };
 
 const TABS = [
@@ -125,6 +126,29 @@ function ProfilTab() {
   return (
     <div className="ticket space-y-3 p-4">
       <Field label="Nama Toko" value={profile.namaToko} onChange={(v) => setProfile({ ...profile, namaToko: v })} />
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-ink/60">Skema Warna Situs (berlaku utk semua pengunjung)</label>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setProfile({ ...profile, colorScheme: 'hijau' })}
+            className={`flex-1 rounded-lg border py-2 text-xs font-semibold ${
+              (profile.colorScheme || 'hijau') === 'hijau' ? 'border-accent bg-accentSoft text-accent' : 'border-ink/15 text-ink/50'
+            }`}
+          >
+            🟢 Hijau
+          </button>
+          <button
+            onClick={() => setProfile({ ...profile, colorScheme: 'maroon' })}
+            className={`flex-1 rounded-lg border py-2 text-xs font-semibold ${
+              profile.colorScheme === 'maroon' ? 'border-accent bg-accentSoft text-accent' : 'border-ink/15 text-ink/50'
+            }`}
+          >
+            🔴 Maroon
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-ink/40">Mode gelap/terang tetap diatur masing-masing pengunjung sendiri.</p>
+      </div>
       <Field
         label="Slogan (tampil di bawah nama toko)"
         value={profile.slogan || ''}
@@ -1096,6 +1120,24 @@ function stockRangeForPeriode(periode: Periode, key: string): { from: string; to
   return { from: `${key}-01-01`, to: `${key}-12-31` };
 }
 
+// Judul rekap yang enak dibaca ("Rekapan Stok Harian — Jumat, 31 Juli 2026")
+// dipakai di sheet Excel supaya jelas ini rekap bulan/hari/tahun apa, bukan
+// cuma tabel angka polos.
+function judulPeriode(periode: Periode, key: string): string {
+  if (periode === 'harian') {
+    const d = new Date(`${key}T00:00:00`);
+    const teks = d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    return `Rekapan Stok Harian — ${teks}`;
+  }
+  if (periode === 'bulanan') {
+    const [y, m] = key.split('-').map(Number);
+    const d = new Date(y, m - 1, 1);
+    const teks = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    return `Rekapan Stok Bulanan — ${teks}`;
+  }
+  return `Rekapan Stok Tahunan — ${key}`;
+}
+
 function StokTab() {
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
@@ -1165,28 +1207,52 @@ function StokTab() {
     try {
       const wb = XLSX.utils.book_new();
       const label = periode === 'harian' ? 'Harian' : periode === 'bulanan' ? 'Bulanan' : 'Tahunan';
+      const judul = judulPeriode(periode, periodeKey);
+      const generatedAt = new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
+
       for (const g of groups) {
-        const aoa: any[][] = [['Nama Parfum', 'IN (ml)', 'OUT (ml)', 'Selisih (ml)']];
+        const aoa: any[][] = [
+          [judul],
+          [`Cabang: ${namaCabang(cabangId)}`],
+          [`Dicetak: ${generatedAt}`],
+          [],
+          [`Kode Seri: ${g.kode}`],
+          ['Nama Parfum', 'Stok In (ml)', 'Stok Out (ml)', 'Selisih (ml)'],
+        ];
         for (const p of g.produk) {
           aoa.push([p.nama, p.masukMl, p.keluarMl, p.net]);
         }
         aoa.push(['TOTAL', g.totalMasukMl, g.totalKeluarMl, g.totalNet]);
         if (periode !== 'harian') {
           aoa.push([]);
-          aoa.push(['Nama Parfum', 'Stok Awal (ml)', 'Stok Akhir (ml)']);
+          aoa.push([`Stok Awal & Akhir — ${judul.replace('Rekapan Stok ', '')}`]);
+          aoa.push(['Nama Parfum', 'Stok Lama/Awal (ml)', 'Stok Akhir (ml)']);
           for (const p of g.produk) {
             const snap = snapshotFor(p.productId);
             aoa.push([p.nama, snap?.stokAwal ?? '-', snap?.stokAkhir ?? '-']);
           }
         }
         const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = [{ wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 14 }];
+        ws['!merges'] = [
+          { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+          { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+          { s: { r: 2, c: 0 }, e: { r: 2, c: 3 } },
+          { s: { r: 4, c: 0 }, e: { r: 4, c: 3 } },
+        ];
         const cleanName = `Kode-${g.kode}`.replace(/[:\\/?*[\]]/g, '').slice(0, 31);
         XLSX.utils.book_append_sheet(wb, ws, cleanName || 'Kode');
       }
       if (groups.length === 0) {
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Tidak ada pergerakan stok di periode ini']]), 'Kosong');
+        const kosong = XLSX.utils.aoa_to_sheet([
+          [judul],
+          [`Cabang: ${namaCabang(cabangId)}`],
+          [],
+          ['Tidak ada pergerakan stok di periode ini'],
+        ]);
+        XLSX.utils.book_append_sheet(wb, kosong, 'Kosong');
       }
-      XLSX.writeFile(wb, `Rekap-Stok-${label}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      XLSX.writeFile(wb, `Rekap-Stok-${label}-${namaCabang(cabangId)}-${periodeKey}.xlsx`);
       setExportMsg('Berhasil export rekap stok.');
     } catch (err: any) {
       setExportMsg(err.message);
@@ -1404,7 +1470,14 @@ function RekapTab() {
       // Baris = tanggal + nama parfum + total ml + total rupiah hari itu,
       // ditutup blok TOTAL per nama parfum (rekap keseluruhan periode).
       for (const kodeGroup of exportData.perKode || []) {
-        const aoa: any[][] = [['Tanggal', 'Nama Parfum', 'Total Ml', 'Total Pendapatan']];
+        const cabangLabel = isSuperadmin ? (cabangId ? branches.find((b) => b.id === cabangId)?.nama || cabangId : 'Semua Cabang') : (branches.find((b) => b.id === session?.cabangId)?.nama || '-');
+        const aoa: any[][] = [
+          [`Rekap Penjualan ${label} — Kode ${kodeGroup.kode}`],
+          [`Cabang: ${cabangLabel}`],
+          [`Dicetak: ${new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })}`],
+          [],
+          ['Tanggal', 'Nama Parfum', 'Total Ml', 'Total Pendapatan'],
+        ];
         for (const r of kodeGroup.rows) {
           aoa.push([r.tanggal, r.parfum, r.totalMl, r.totalRupiah]);
         }
@@ -1421,6 +1494,12 @@ function RekapTab() {
         aoa.push(['TOTAL', grandMl, grandRp]);
 
         const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = [{ wch: 22 }, { wch: 26 }, { wch: 14 }, { wch: 18 }];
+        ws['!merges'] = [
+          { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+          { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+          { s: { r: 2, c: 0 }, e: { r: 2, c: 3 } },
+        ];
         XLSX.utils.book_append_sheet(wb, ws, sheetName('Kode', kodeGroup.kode, usedSheetNames));
       }
 
