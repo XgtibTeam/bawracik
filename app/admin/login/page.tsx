@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import BrandLogo from '@/components/BrandLogo';
 import { useRouter } from 'next/navigation';
 
 export default function AdminLoginPage() {
@@ -33,8 +34,7 @@ export default function AdminLoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/logo.png" alt="BAW Group" className="h-20 w-20 object-contain" />
+      <BrandLogo className="h-20 w-20" />
       <p className="mt-3 text-xs uppercase tracking-widest text-accent">BAW Group · Panel Admin</p>
       <h1 className="mt-1 font-display text-2xl font-semibold text-ink">Masuk</h1>
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import CameraCapture from '@/components/CameraCapture';
+import BrandLogo from '@/components/BrandLogo';
 
 const KETERANGAN_OPTIONS = ['Sakit', 'Izin', 'Lembur', 'Lainnya'] as const;
 
@@ -106,8 +107,7 @@ export default function AbsensiPage() {
       <main className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md flex-col items-center justify-center px-6 py-10">
         <div className="ticket w-full p-8 text-center">
           <div className="perforated mb-6 h-px w-full" />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="BAW Group" className="mx-auto h-20 w-20 object-contain" />
+          <BrandLogo className="mx-auto h-20 w-20" />
           <p className="mt-3 text-xs uppercase tracking-widest text-accent">BAW Group · Absensi Tercatat</p>
           <h1 className="mt-2 font-display text-2xl font-semibold text-ink">Berhasil dikirim</h1>
           <div className="mono-time mt-6 text-4xl font-semibold text-ink">{result.jam}</div>
@@ -139,8 +139,7 @@ export default function AbsensiPage() {
   return (
     <main className="mx-auto min-h-screen max-w-md px-6 py-10">
       <header className="mb-6 flex items-center gap-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="BAW Group" className="h-16 w-16 flex-shrink-0 object-contain" />
+        <BrandLogo className="h-16 w-16 flex-shrink-0" />
         <div>
           <p className="text-xs uppercase tracking-widest text-accent">BAW Group · Kartu Jam Kerja</p>
           <h1 className="mt-1 font-display text-2xl font-semibold text-ink">

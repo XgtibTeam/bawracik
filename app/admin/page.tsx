@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { detectShift } from '@/lib/shift';
+import BrandLogo from '@/components/BrandLogo';
 
 type AttendanceRecord = {
   id: string;
@@ -256,8 +257,7 @@ export default function AdminDashboardPage() {
     <main className="mx-auto max-w-5xl px-6 py-10">
       <div className="mb-8 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="BAW Group" className="h-16 w-16 object-contain" />
+          <BrandLogo className="h-16 w-16" />
           <div>
             <p className="text-xs uppercase tracking-widest text-accent">BAW Group · Panel Admin</p>
             <h1 className="mt-1 font-display text-2xl font-semibold text-ink">Rekap Absensi</h1>

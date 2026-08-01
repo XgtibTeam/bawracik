@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { driveImageUrl } from '@/lib/drive-url';
+import ProductCatalog from '@/components/ProductCatalog';
 
 type Branch = { id: string; nama: string; alamat?: string };
 type Product = {
@@ -32,8 +33,6 @@ type CartItem = {
   qty: number;
 };
 
-const KATEGORI_FILTER_OPTIONS = ['biasa', 'premium', 'sultan', 'series'] as const;
-
 export default function BelanjaPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -44,10 +43,6 @@ export default function BelanjaPage() {
   const [cabangId, setCabangId] = useState('');
   const [tipe, setTipe] = useState<'ecer' | 'grosir'>('ecer');
   const [cart, setCart] = useState<CartItem[]>([]);
-
-  // ----- Search & filter kategori katalog -----
-  const [cariProduk, setCariProduk] = useState('');
-  const [filterKategori, setFilterKategori] = useState('');
 
   // ----- Stok per cabang (beda-beda tiap cabang yang dipilih) -----
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
@@ -134,15 +129,6 @@ export default function BelanjaPage() {
       })
       .catch(() => setStockMap({}));
   }, [cabangId]);
-
-  const filteredProducts = products.filter((p) => {
-    const matchSearch = cariProduk.trim()
-      ? p.nama.toLowerCase().includes(cariProduk.trim().toLowerCase()) ||
-        p.kode.toLowerCase().includes(cariProduk.trim().toLowerCase())
-      : true;
-    const matchKategori = filterKategori ? p.kategori === filterKategori : true;
-    return matchSearch && matchKategori;
-  });
 
   function bukaDetail(p: Product) {
     setDetailProduct(p);
@@ -443,79 +429,19 @@ export default function BelanjaPage() {
 
           <div className="mt-4">
             <h2 className="font-display text-sm font-semibold text-ink">Katalog Produk</h2>
-            <input
-              value={cariProduk}
-              onChange={(e) => setCariProduk(e.target.value)}
-              placeholder="Cari nama/kode produk..."
-              className="mt-2 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-            />
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <button
-                onClick={() => setFilterKategori('')}
-                className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
-                  filterKategori === '' ? 'bg-accent text-white' : 'bg-paper text-ink/60'
-                }`}
-              >
-                Semua
-              </button>
-              {KATEGORI_FILTER_OPTIONS.map((k) => (
-                <button
-                  key={k}
-                  onClick={() => setFilterKategori(k)}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
-                    filterKategori === k ? 'bg-accent text-white' : 'bg-paper text-ink/60'
-                  }`}
-                >
-                  {k}
-                </button>
-              ))}
+            <div className="mt-2">
+              <ProductCatalog
+                products={products}
+                stockMap={cabangId ? stockMap : undefined}
+                stockMode="customer"
+                hargaHint={(p) =>
+                  p.isBotol
+                    ? `mulai Rp${(mlTiers[0]?.hargaPerMl ?? 0).toLocaleString('id-ID')}/ml`
+                    : `Rp${(p.hargaJual ?? 0).toLocaleString('id-ID')}`
+                }
+                onSelectProduct={(p) => bukaDetail(p as Product)}
+              />
             </div>
-            {loadingCatalog ? (
-              <p className="mt-3 text-sm text-ink/50">Memuat katalog...</p>
-            ) : filteredProducts.length === 0 ? (
-              <p className="mt-3 text-sm text-ink/50">
-                {products.length === 0 ? 'Belum ada produk di katalog.' : 'Tidak ada produk yang cocok.'}
-              </p>
-            ) : (
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                {filteredProducts.map((p) => {
-                  const img = driveImageUrl(p.imageDriveId);
-                  const sisa = cabangId ? stockMap[p.id] : undefined;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => bukaDetail(p)}
-                      className="ticket flex flex-col overflow-hidden p-0 text-left transition hover:-translate-y-0.5"
-                    >
-                      <div className="aspect-square w-full bg-paper">
-                        {img ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={img} alt={p.nama} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-2xl">🧴</div>
-                        )}
-                      </div>
-                      <div className="p-2.5">
-                        <p className="line-clamp-1 text-sm font-semibold text-ink">{p.nama}</p>
-                        <p className="mt-0.5 line-clamp-2 text-xs text-ink/50">
-                          {p.deskripsi || (p.isBotol ? 'Parfum isi ulang' : 'Produk')}
-                        </p>
-                        <p className="mt-1.5 text-xs font-semibold text-accent">
-                          {p.isBotol
-                            ? `mulai Rp${(mlTiers[0]?.hargaPerMl ?? 0).toLocaleString('id-ID')}/ml`
-                            : `Rp${(p.hargaJual ?? 0).toLocaleString('id-ID')}`}
-                        </p>
-                        {sisa !== undefined && (
-                          <p className={`mt-1 text-[10px] font-semibold ${sisa <= 0 ? 'text-danger' : 'text-ink/40'}`}>
-                            Sisa stok: {sisa <= 0 ? 'Habis' : `${sisa.toLocaleString('id-ID')} ml`}
-                          </p>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
           </div>
 
           {cart.length > 0 && (
@@ -733,8 +659,8 @@ export default function BelanjaPage() {
               )}
 
               {cabangId && stockMap[detailProduct.id] !== undefined && (
-                <p className={`mt-2 text-xs font-semibold ${stockMap[detailProduct.id] <= 0 ? 'text-danger' : 'text-ink/50'}`}>
-                  Sisa stok di cabang ini: {stockMap[detailProduct.id] <= 0 ? 'Habis' : `${stockMap[detailProduct.id].toLocaleString('id-ID')} ml`}
+                <p className={`mt-2 text-xs font-semibold ${stockMap[detailProduct.id] <= 0 ? 'text-danger' : 'text-accent'}`}>
+                  {stockMap[detailProduct.id] <= 0 ? 'Stok Habis di cabang ini' : 'Stok Tersedia di cabang ini'}
                 </p>
               )}
 

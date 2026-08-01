@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import BrandLogo from '@/components/BrandLogo';
 
 export default function KasirLoginPage() {
   const router = useRouter();
@@ -33,8 +34,7 @@ export default function KasirLoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/logo.png" alt="BAW Group" className="h-20 w-20 object-contain" />
+      <BrandLogo className="h-20 w-20" />
       <p className="mt-3 text-xs uppercase tracking-widest text-accent">BAW Group · Kasir</p>
       <h1 className="mt-1 font-display text-2xl font-semibold text-ink">Login Karyawan</h1>
 

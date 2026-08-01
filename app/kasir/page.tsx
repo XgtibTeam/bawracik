@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PesananTab from '@/components/PesananTab';
+import ProductCatalog from '@/components/ProductCatalog';
 
 type Session = { role: string; nama: string; cabangId: string | null; username: string };
 type Branch = { id: string; nama: string };
@@ -35,7 +36,6 @@ export default function KasirPage() {
   const [hargaPerMl, setHargaPerMl] = useState<number>(0);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProductId, setSelectedProductId] = useState('');
-  const [productSearch, setProductSearch] = useState('');
   const [inputMode, setInputMode] = useState<'rupiah' | 'ml'>('rupiah');
   const [inputValue, setInputValue] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -94,18 +94,26 @@ export default function KasirPage() {
     setHargaPerMl(tier ? tier.hargaPerMl : 0);
   }, [selectedProduct, pricing]);
 
-  const filteredProducts = productSearch.trim()
-    ? products.filter(
-        (p) =>
-          p.nama.toLowerCase().includes(productSearch.trim().toLowerCase()) ||
-          p.kode.toLowerCase().includes(productSearch.trim().toLowerCase())
-      )
-    : products;
-
   // Superadmin tidak terikat 1 cabang (cabangId null), jadi harus pilih
   // cabang secara manual sebelum bisa checkout. Staff/admin biasa langsung
   // pakai cabangId dari sesi login mereka.
   const effectiveCabangId = session?.cabangId || selectedCabangId || '';
+
+  const [stockMap, setStockMap] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!effectiveCabangId) {
+      setStockMap({});
+      return;
+    }
+    fetch(`/api/stock-current?cabangId=${effectiveCabangId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const map: Record<string, number> = {};
+        for (const s of d.stok || []) map[s.productId] = s.sisa;
+        setStockMap(map);
+      })
+      .catch(() => setStockMap({}));
+  }, [effectiveCabangId]);
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -182,7 +190,6 @@ export default function KasirPage() {
       },
     ]);
     setSelectedProductId('');
-    setProductSearch('');
     setInputValue('');
     setGratisMode(false);
   }
@@ -445,38 +452,33 @@ export default function KasirPage() {
           </div>
 
           <div className="ticket mt-4 space-y-3 p-4">
-            <h2 className="font-display text-sm font-semibold text-ink">Tambah Parfum (dari Katalog)</h2>
-            <input
-              value={productSearch}
-              onChange={(e) => setProductSearch(e.target.value)}
-              placeholder="Cari nama/kode produk..."
-              className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+            <h2 className="font-display text-sm font-semibold text-ink">Pilih Parfum dari Katalog</h2>
+            <ProductCatalog
+              products={products}
+              stockMap={effectiveCabangId ? stockMap : undefined}
+              stockMode="kasir"
+              hargaHint={(p) => {
+                const tier = pricing?.categoryPrices?.find((c) => c.kategori === p.kategori);
+                return tier ? `Rp${tier.hargaPerMl.toLocaleString('id-ID')}/ml` : 'Kategori belum diset';
+              }}
+              onSelectProduct={(p) => setSelectedProductId(p.id)}
             />
-            <select
-              value={selectedProductId}
-              onChange={(e) => setSelectedProductId(e.target.value)}
-              className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-            >
-              <option value="">— Pilih produk dari katalog —</option>
-              {filteredProducts.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nama} ({p.kode}){p.kategori ? ` · ${p.kategori}` : ''}
-                </option>
-              ))}
-            </select>
             {products.length === 0 && (
               <p className="text-xs text-warn">
                 Katalog produk masih kosong. Tambah/import produk dulu di Admin → Toko → Produk.
               </p>
             )}
             {selectedProduct && (
-              <p className="text-xs text-ink/50">
-                Kategori: <span className="font-semibold text-ink">{selectedProduct.kategori || '—'}</span> · Harga:{' '}
-                <span className="font-semibold text-ink">Rp{hargaPerMl.toLocaleString('id-ID')}/ml</span>
-                {!selectedProduct.kategori && (
-                  <span className="text-danger"> (produk ini belum ada kategori, set dulu di Admin → Produk)</span>
-                )}
-              </p>
+              <div className="rounded-lg bg-accentSoft p-3">
+                <p className="text-xs text-ink/70">
+                  Dipilih: <span className="font-semibold text-ink">{selectedProduct.nama}</span> · Kategori:{' '}
+                  <span className="font-semibold text-ink">{selectedProduct.kategori || '—'}</span> · Harga:{' '}
+                  <span className="font-semibold text-ink">Rp{hargaPerMl.toLocaleString('id-ID')}/ml</span>
+                  {!selectedProduct.kategori && (
+                    <span className="text-danger"> (produk ini belum ada kategori, set dulu di Admin → Produk)</span>
+                  )}
+                </p>
+              </div>
             )}
             <div className="flex gap-2">
               <button
