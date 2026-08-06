@@ -104,3 +104,51 @@ export async function computeStockRecap(params: {
   }
   return groups;
 }
+
+// ============================================================
+// STOK SAAT INI (all-time, tidak terikat rentang tanggal)
+// Ini yang tadinya "hilang": input stok masuk tersimpan ke stock_movements,
+// tapi sebelumnya tidak ada tempat yang menjumlahkan seluruh masuk vs
+// seluruh keluar dari awal sampai sekarang untuk ditampilkan sebagai satu
+// angka "stok saat ini" per produk. computeStockRecap() di atas SENGAJA
+// dibatasi rentang tanggal (buat rekap harian/bulanan/tahunan), jadi kalau
+// stok baru diinput tapi periode rekap yang sedang dilihat tidak mencakup
+// tanggal itu, ya kelihatannya "kosong". Fungsi ini melengkapi itu.
+// ============================================================
+
+export type CurrentStock = {
+  productId: string;
+  nama: string;
+  kode: string;
+  stokMl: number; // masuk (all-time) - keluar (all-time)
+};
+
+export async function computeCurrentStock(params: { cabangId: string }): Promise<CurrentStock[]> {
+  const [products, movements, transactions] = await Promise.all([
+    getProducts(),
+    getStockMovements({ cabangId: params.cabangId }),
+    getTransactions({ cabangId: params.cabangId }),
+  ]);
+
+  const masukMap = new Map<string, number>();
+  for (const m of movements) {
+    masukMap.set(m.productId, (masukMap.get(m.productId) || 0) + m.ml);
+  }
+
+  const keluarMap = new Map<string, number>();
+  for (const t of transactions) {
+    for (const item of t.items) {
+      if (!item.productId) continue;
+      keluarMap.set(item.productId, (keluarMap.get(item.productId) || 0) + item.ml);
+    }
+  }
+
+  const result: CurrentStock[] = [];
+  for (const p of products) {
+    const masuk = masukMap.get(p.id) || 0;
+    const keluar = keluarMap.get(p.id) || 0;
+    if (masuk === 0 && keluar === 0) continue; // hanya produk yang pernah ada pergerakan
+    result.push({ productId: p.id, nama: p.nama, kode: p.kode, stokMl: masuk - keluar });
+  }
+  return result.sort((a, b) => a.nama.localeCompare(b.nama));
+}
