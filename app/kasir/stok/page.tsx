@@ -9,7 +9,7 @@ type Periode = 'harian' | 'bulanan' | 'tahunan';
 type ProductStockUsage = { productId: string; nama: string; kode: string; masukMl: number; keluarMl: number; net: number };
 type KodeStockGroup = { kode: string; produk: ProductStockUsage[]; totalMasukMl: number; totalKeluarMl: number; totalNet: number };
 type Snapshot = { productId: string; yearMonth: string; stokAwal: number | null; stokAkhir: number | null };
-type ProductStockStatus = { productId: string; nama: string; kode: string; stokLama: number; stokIn: number; stokOut: number; sisa: number };
+type CurrentStock = { productId: string; nama: string; kode: string; stokMl: number };
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -41,14 +41,16 @@ export default function StokKasirPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // ---- Stok saat ini (all-time, langsung update begitu stok masuk disimpan) ----
+  const [currentStock, setCurrentStock] = useState<CurrentStock[]>([]);
+  const [loadingCurrent, setLoadingCurrent] = useState(true);
+
   // ---- Rekap ----
   const [periode, setPeriode] = useState<Periode>('harian');
   const [periodeKey, setPeriodeKey] = useState(todayStr());
   const [groups, setGroups] = useState<KodeStockGroup[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
-  const [currentStock, setCurrentStock] = useState<ProductStockStatus[]>([]);
   const [loadingRecap, setLoadingRecap] = useState(true);
-  const isAdmin = session?.role === 'superadmin' || session?.role === 'admin';
 
   // ---- Stok awal/akhir (bulanan saja) ----
   const [snapshotProductId, setSnapshotProductId] = useState('');
@@ -62,6 +64,15 @@ export default function StokKasirPage() {
     fetch('/api/products').then((r) => r.json()).then((d) => setProducts(d.products || []));
   }, []);
 
+  function loadCurrentStock() {
+    setLoadingCurrent(true);
+    fetch('/api/stock-current')
+      .then((r) => r.json())
+      .then((d) => setCurrentStock(d.stocks || []))
+      .finally(() => setLoadingCurrent(false));
+  }
+  useEffect(loadCurrentStock, []);
+
   function loadRecap() {
     setLoadingRecap(true);
     const { from, to } = rangeForPeriode(periode, periodeKey);
@@ -70,7 +81,6 @@ export default function StokKasirPage() {
       .then((d) => {
         setGroups(d.groups || []);
         setSnapshots(d.snapshots || []);
-        setCurrentStock(d.currentStock || []);
       })
       .finally(() => setLoadingRecap(false));
   }
@@ -103,6 +113,7 @@ export default function StokKasirPage() {
       setMsg(`Stok masuk tersimpan: ${kg} kg (${mlPreview} ml).`);
       setKg('');
       loadRecap();
+      loadCurrentStock();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -151,54 +162,7 @@ export default function StokKasirPage() {
         mengikuti penjualan harian, bulanan, dan tahunan.
       </p>
 
-      {/* ---- Ringkasan 3 tipe stok (lama/in/out) untuk bulan berjalan ---- */}
-      <div className="ticket space-y-3 p-4">
-        <h2 className="font-display text-sm font-semibold text-ink">Ringkasan Stok Bulan Ini</h2>
-        <p className="-mt-1 text-[11px] text-ink/40">
-          Stok Lama = sisa dari sebelum bulan ini (masih bergerak/terjual) · Stok In = total masuk (baru) bulan ini · Stok
-          Out = total terjual bulan ini.
-        </p>
-        {currentStock.filter((s) => s.stokLama || s.stokIn || s.stokOut).length === 0 ? (
-          <p className="text-xs text-ink/40">Belum ada data stok untuk cabang ini.</p>
-        ) : (
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-left text-ink/40">
-                <th className="pb-1 font-normal">Produk</th>
-                <th className="pb-1 text-right font-normal">Lama</th>
-                <th className="pb-1 text-right font-normal">In</th>
-                <th className="pb-1 text-right font-normal">Out</th>
-                <th className="pb-1 text-right font-normal">Sisa</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentStock
-                .filter((s) => s.stokLama || s.stokIn || s.stokOut)
-                .map((s) => (
-                  <tr key={s.productId} className="border-t border-ink/5">
-                    <td className="py-1 text-ink">{s.nama}</td>
-                    <td className="py-1 text-right text-ink/60">{s.stokLama.toLocaleString('id-ID')}</td>
-                    <td className="py-1 text-right text-accent">+{s.stokIn.toLocaleString('id-ID')}</td>
-                    <td className="py-1 text-right text-danger">-{s.stokOut.toLocaleString('id-ID')}</td>
-                    <td className={`py-1 text-right font-semibold ${s.sisa < 0 ? 'text-danger' : 'text-ink'}`}>
-                      {s.sisa.toLocaleString('id-ID')}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* ---- Input stok masuk (KHUSUS ADMIN — bulanan) ---- */}
-      {!isAdmin ? (
-        <div className="ticket space-y-1 p-4">
-          <h2 className="font-display text-sm font-semibold text-ink">Input Stok Masuk</h2>
-          <p className="text-xs text-ink/50">
-            Input stok bulanan hanya bisa dilakukan oleh admin cabang. Kasir hanya bisa melihat rekap di bawah.
-          </p>
-        </div>
-      ) : (
+      {/* ---- Input stok masuk ---- */}
       <div className="ticket space-y-3 p-4">
         <h2 className="font-display text-sm font-semibold text-ink">Input Stok Masuk</h2>
         <div>
@@ -247,7 +211,43 @@ export default function StokKasirPage() {
           {submitting ? 'Menyimpan...' : 'Simpan Stok Masuk'}
         </button>
       </div>
-      )}
+
+      {/* ---- Stok saat ini (all-time) ---- */}
+      <div className="ticket space-y-2 p-4">
+        <h2 className="font-display text-sm font-semibold text-ink">Stok Saat Ini</h2>
+        <p className="-mt-1 text-[11px] text-ink/40">
+          Total stok masuk dikurangi total terjual dari awal sampai sekarang. Langsung update begitu stok masuk
+          disimpan di atas.
+        </p>
+        {loadingCurrent && <p className="text-xs text-ink/50">Memuat...</p>}
+        {!loadingCurrent && currentStock.length === 0 && (
+          <p className="text-xs text-ink/40">Belum ada produk dengan pergerakan stok.</p>
+        )}
+        {!loadingCurrent && currentStock.length > 0 && (
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-ink/40">
+                <th className="pb-1 font-normal">Nama Parfum</th>
+                <th className="pb-1 text-right font-normal">Stok (ml)</th>
+                <th className="pb-1 text-right font-normal">≈ kg</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentStock.map((s) => (
+                <tr key={s.productId} className="border-t border-ink/5">
+                  <td className="py-1 text-ink">
+                    {s.nama} <span className="text-ink/40">({s.kode})</span>
+                  </td>
+                  <td className={`py-1 text-right font-semibold ${s.stokMl < 0 ? 'text-danger' : 'text-ink'}`}>
+                    {s.stokMl.toLocaleString('id-ID')}
+                  </td>
+                  <td className="py-1 text-right text-ink/50">{(s.stokMl / 1000).toLocaleString('id-ID')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
 
       {/* ---- Pilih periode rekap ---- */}
       <div className="ticket space-y-3 p-4">
@@ -335,8 +335,8 @@ export default function StokKasirPage() {
           ))}
       </div>
 
-      {/* ---- Stok awal/akhir (bulanan, KHUSUS ADMIN) ---- */}
-      {periode === 'bulanan' && isAdmin && (
+      {/* ---- Stok awal/akhir (bulanan) ---- */}
+      {periode === 'bulanan' && (
         <div className="ticket space-y-3 p-4">
           <h2 className="font-display text-sm font-semibold text-ink">Stok Awal / Stok Akhir Bulan Ini</h2>
           <p className="-mt-1 text-[11px] text-ink/40">
