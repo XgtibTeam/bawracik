@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { getProducts, saveProducts } from '@/lib/supabase';
 
-// Auto-generate kode dari nama kalau kolom kode dikosongkan — dulu ini cuma
-// ada di jalur import Excel, sementara form "Tambah Produk Manual" MEWAJIBKAN
-// kode diisi tanpa fallback, jadi kalau kosong API balas error 400 tapi UI-nya
-// tidak menampilkan pesan itu (kelihatan seperti "eror" tanpa penjelasan).
+// Auto-generate kode dari nama kalau kolom kode dikosongkan di form Tambah
+// Produk Manual (dulu tidak ada fallback ini — cuma ada di jalur import
+// Excel — jadi kalau admin biarkan kosong, tersangkut error tanpa pesan).
 function slugKode(nama: string): string {
   const slug = nama
     .toLowerCase()
@@ -40,15 +39,14 @@ export async function POST(req: NextRequest) {
     }
 
     const products = await getProducts();
+    // PENTING: sama seperti jalur import (lihat api/products/import/route.ts)
+    // — `kode` adalah kode SERI/grup, BUKAN SKU unik, jadi boleh dipakai
+    // bareng-bareng oleh banyak nama parfum. Yang tidak boleh duplikat itu
+    // `nama`, bukan `kode`. Kode otomatis dibuat dari nama kalau dikosongkan.
     let kode = (body?.kode || '').trim();
-    if (!kode) {
-      // Auto-generate, jamin unik walau nama sama persis dengan produk lain
-      kode = slugKode(nama);
-      while (products.some((p) => p.kode.toLowerCase() === kode.toLowerCase())) {
-        kode = slugKode(nama);
-      }
-    } else if (products.some((p) => p.kode.toLowerCase() === kode.toLowerCase())) {
-      return NextResponse.json({ error: `Kode "${kode}" sudah dipakai produk lain, pakai kode lain atau kosongkan biar dibuat otomatis` }, { status: 400 });
+    if (!kode) kode = slugKode(nama);
+    if (products.some((p) => p.nama.trim().toLowerCase() === nama.toLowerCase())) {
+      return NextResponse.json({ error: `Produk dengan nama "${nama}" sudah ada` }, { status: 400 });
     }
 
     const product = {
