@@ -55,6 +55,62 @@ export async function getKeluarMlByProduct(params: {
   return result;
 }
 
+export type ProductStockStatus = {
+  productId: string;
+  nama: string;
+  kode: string;
+  stokLama: number; // saldo yang dibawa dari sebelum bulan berjalan (masih bergerak/terjual)
+  stokIn: number; // total stok masuk (baru) bulan berjalan
+  stokOut: number; // total terjual bulan berjalan
+  sisa: number; // stokLama + stokIn - stokOut = sisa stok saat ini
+};
+
+/**
+ * Hitung status stok "saat ini" per produk untuk satu cabang: stok lama
+ * (saldo sebelum bulan berjalan, hasil dari masuk-keluar sebelum tanggal 1
+ * bulan ini), stok in (masuk bulan ini, kumulatif walau diinput berkali-kali),
+ * dan stok out (total terjual bulan ini). `asOf` menentukan "bulan berjalan"
+ * (default hari ini) — dipakai halaman kasir/stok & katalog belanja (biar
+ * tiap cabang bisa nampilin sisa stok yang beda-beda).
+ */
+export async function computeCurrentStock(params: { cabangId: string; asOf?: string }): Promise<ProductStockStatus[]> {
+  const asOf = params.asOf || new Date().toISOString().slice(0, 10);
+  const monthStart = `${asOf.slice(0, 7)}-01`;
+  const prevDay = new Date(monthStart);
+  prevDay.setDate(prevDay.getDate() - 1);
+  const beforeMonthEnd = prevDay.toISOString().slice(0, 10);
+
+  const [products, movementsLama, movementsBulanIni, keluarLama, keluarBulanIni] = await Promise.all([
+    getProducts(),
+    getStockMovements({ cabangId: params.cabangId, from: '2000-01-01', to: beforeMonthEnd }),
+    getStockMovements({ cabangId: params.cabangId, from: monthStart, to: asOf }),
+    getKeluarMlByProduct({ cabangId: params.cabangId, from: '2000-01-01', to: beforeMonthEnd }),
+    getKeluarMlByProduct({ cabangId: params.cabangId, from: monthStart, to: asOf }),
+  ]);
+
+  const masukLamaMap = new Map<string, number>();
+  for (const m of movementsLama) masukLamaMap.set(m.productId, (masukLamaMap.get(m.productId) || 0) + m.ml);
+  const masukIniMap = new Map<string, number>();
+  for (const m of movementsBulanIni) masukIniMap.set(m.productId, (masukIniMap.get(m.productId) || 0) + m.ml);
+
+  return products.map((p) => {
+    const masukLama = masukLamaMap.get(p.id) || 0;
+    const keluarLamaMl = keluarLama.get(p.id) || 0;
+    const stokLama = Math.max(0, masukLama - keluarLamaMl);
+    const stokIn = masukIniMap.get(p.id) || 0;
+    const stokOut = keluarBulanIni.get(p.id) || 0;
+    return {
+      productId: p.id,
+      nama: p.nama,
+      kode: p.kode,
+      stokLama,
+      stokIn,
+      stokOut,
+      sisa: stokLama + stokIn - stokOut,
+    };
+  });
+}
+
 /**
  * Rekap stok penuh untuk satu cabang dalam rentang tanggal, dikelompokkan
  * per kode produk (kolom IN = masuk, OUT = keluar), sesuai model rekap
@@ -103,52 +159,4 @@ export async function computeStockRecap(params: {
     groups.push({ kode, produk: produkUsage, totalMasukMl: totalMasuk, totalKeluarMl: totalKeluar, totalNet: totalMasuk - totalKeluar });
   }
   return groups;
-}
-
-// ============================================================
-// STOK SAAT INI (all-time, tidak terikat rentang tanggal)
-// Ini yang tadinya "hilang": input stok masuk tersimpan ke stock_movements,
-// tapi sebelumnya tidak ada tempat yang menjumlahkan seluruh masuk vs
-// seluruh keluar dari awal sampai sekarang untuk ditampilkan sebagai satu
-// angka "stok saat ini" per produk. computeStockRecap() di atas SENGAJA
-// dibatasi rentang tanggal (buat rekap harian/bulanan/tahunan), jadi kalau
-// stok baru diinput tapi periode rekap yang sedang dilihat tidak mencakup
-// tanggal itu, ya kelihatannya "kosong". Fungsi ini melengkapi itu.
-// ============================================================
-
-export type CurrentStock = {
-  productId: string;
-  nama: string;
-  kode: string;
-  stokMl: number; // masuk (all-time) - keluar (all-time)
-};
-
-export async function computeCurrentStock(params: { cabangId: string }): Promise<CurrentStock[]> {
-  const [products, movements, transactions] = await Promise.all([
-    getProducts(),
-    getStockMovements({ cabangId: params.cabangId }),
-    getTransactions({ cabangId: params.cabangId }),
-  ]);
-
-  const masukMap = new Map<string, number>();
-  for (const m of movements) {
-    masukMap.set(m.productId, (masukMap.get(m.productId) || 0) + m.ml);
-  }
-
-  const keluarMap = new Map<string, number>();
-  for (const t of transactions) {
-    for (const item of t.items) {
-      if (!item.productId) continue;
-      keluarMap.set(item.productId, (keluarMap.get(item.productId) || 0) + item.ml);
-    }
-  }
-
-  const result: CurrentStock[] = [];
-  for (const p of products) {
-    const masuk = masukMap.get(p.id) || 0;
-    const keluar = keluarMap.get(p.id) || 0;
-    if (masuk === 0 && keluar === 0) continue; // hanya produk yang pernah ada pergerakan
-    result.push({ productId: p.id, nama: p.nama, kode: p.kode, stokMl: masuk - keluar });
-  }
-  return result.sort((a, b) => a.nama.localeCompare(b.nama));
 }
