@@ -9,10 +9,11 @@ import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
 // nama_product / Nama Produk, kode_product / Kode, kategori_product /
 // Kategori — nilainya salah satu dari biasa/sedang/mewah/series, stok /
 // stok_kg — stok awal produk itu) lalu kirim JSON ke sini. Kode produk
-// dibuat otomatis dari nama kalau tidak diisi. Kalau ada kolom stok & cabangId
-// dikirim, tiap produk yang stoknya > 0 langsung dicatat sebagai 1 baris
-// stock_movements (stok masuk), jadi begitu produk diimport, "Stok Saat Ini"
-// (lihat /api/stock-current) langsung ke-update — tidak perlu input manual lagi.
+// dibuat otomatis dari nama kalau tidak diisi. Kalau ada kolom stok &
+// cabangId dikirim, tiap produk yang stoknya > 0 langsung dicatat sebagai
+// 1 baris stock_movements (stok masuk) — sama seperti input manual di
+// halaman kasir/stok — jadi begitu produk diimport, "Stok Saat Ini"
+// langsung ke-update tanpa perlu input ulang.
 function slugKode(nama: string, i: number): string {
   const slug = nama
     .toLowerCase()
@@ -30,7 +31,7 @@ function normalizeKategori(raw: unknown): string | undefined {
 }
 
 // Ambil jumlah stok awal (dalam ml) dari 1 baris Excel — dukung kolom "stok"
-// (dianggap satuan ml langsung) ATAU "stok_kg" (dikonversi ×1000 seperti input
+// (satuan ml langsung) ATAU "stok_kg" (dikonversi ×1000, sama seperti input
 // stok manual di halaman kasir/stok).
 function parseStokMl(row: any): number {
   const stokMlRaw = row?.stok ?? row?.['Stok'] ?? row?.['stok_ml'] ?? row?.['Stok (ml)'] ?? row?.['Stok Ml'] ?? row?.['stok ml'];
@@ -64,15 +65,19 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json({ error: 'Data import kosong' }, { status: 400 });
     }
-    // Cabang tujuan stok awal — kalau bukan superadmin, paksa pakai cabang sesi
-    // sendiri (tidak boleh titip stok ke cabang lain lewat body).
+    // Cabang tujuan stok awal — kalau bukan superadmin, paksa pakai cabang
+    // sesi sendiri (tidak boleh titip stok ke cabang lain lewat body).
     const cabangId = session.role === 'superadmin' ? body?.cabangId || undefined : session.cabangId ?? undefined;
 
     const products = await getProducts();
-    const existingKode = new Set(products.map((p) => p.kode.toLowerCase()));
+    // PENTING: `kode` adalah kode SERI/grup produk (mis. "R" dipakai banyak
+    // nama parfum sekaligus, lihat MyKonos_Series.xlsx) — BUKAN SKU unik,
+    // jadi tidak boleh dipakai sbg kunci duplikat. Dedup pakai `nama` saja.
+    const existingNama = new Set(products.map((p) => p.nama.trim().toLowerCase()));
 
     const errors: string[] = [];
     const added: typeof products = [];
+    const namaDalamBatchIni = new Set<string>();
     const stokRows: { productId: string; ml: number }[] = [];
 
     for (const [i, row] of rows.entries()) {
@@ -100,11 +105,14 @@ export async function POST(req: NextRequest) {
         errors.push(`Baris ${i + 1}: nama kosong, dilewati`);
         continue;
       }
-      if (!kode) kode = slugKode(nama, i);
-      if (existingKode.has(kode.toLowerCase())) {
-        errors.push(`Baris ${i + 1}: kode "${kode}" sudah ada, dilewati`);
+      const namaKey = nama.toLowerCase();
+      if (existingNama.has(namaKey) || namaDalamBatchIni.has(namaKey)) {
+        errors.push(`Baris ${i + 1}: produk "${nama}" sudah ada, dilewati`);
         continue;
       }
+      // kode BOLEH sama dengan produk lain (kode seri/grup) — kalau kosong,
+      // dibuatkan otomatis dari nama, tidak perlu dicek keunikan.
+      if (!kode) kode = slugKode(nama, i);
 
       const hargaJualRaw = row?.hargaJual ?? row?.['Harga jual'] ?? row?.['Harga Jual'];
       const imageUrl = row?.imageUrl ?? row?.['link gambar'] ?? row?.['Link Gambar'];
@@ -127,15 +135,15 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString(),
       };
       added.push(product);
-      existingKode.add(kode.toLowerCase());
+      namaDalamBatchIni.add(namaKey);
       if (stokMl > 0 && cabangId) stokRows.push({ productId: product.id, ml: stokMl });
     }
 
     const updated = [...products, ...added];
     await saveProducts(updated);
 
-    // Catat stok awal (kalau ada) sebagai stock_movements — dilakukan setelah
-    // produk berhasil tersimpan, supaya productId-nya valid.
+    // Catat stok awal (kalau ada) sebagai stock_movements — dilakukan
+    // setelah produk berhasil tersimpan, supaya productId-nya valid.
     if (stokRows.length > 0 && cabangId) {
       const tanggal = new Date().toISOString().slice(0, 10);
       for (const s of stokRows) {
