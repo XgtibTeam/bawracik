@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { getProducts, saveProducts } from '@/lib/supabase';
 
+// Auto-generate kode dari nama kalau kolom kode dikosongkan — dulu ini cuma
+// ada di jalur import Excel, sementara form "Tambah Produk Manual" MEWAJIBKAN
+// kode diisi tanpa fallback, jadi kalau kosong API balas error 400 tapi UI-nya
+// tidak menampilkan pesan itu (kelihatan seperti "eror" tanpa penjelasan).
+function slugKode(nama: string): string {
+  const slug = nama
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 20);
+  return `${slug || 'produk'}-${Date.now().toString(36)}`;
+}
+
 // Route ini SELALU dijalankan dinamis (bukan di-cache statis Next.js) —
 // tanpa ini, data baru (mis. feed/produk/harga terbaru) bisa 'macet' di
 // snapshot lama sampai redeploy, karena Next.js App Router men-static-kan
@@ -22,14 +35,20 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const nama = (body?.nama || '').trim();
-    const kode = (body?.kode || '').trim();
-    if (!nama || !kode) {
-      return NextResponse.json({ error: 'Nama dan kode produk wajib diisi' }, { status: 400 });
+    if (!nama) {
+      return NextResponse.json({ error: 'Nama produk wajib diisi' }, { status: 400 });
     }
 
     const products = await getProducts();
-    if (products.some((p) => p.kode.toLowerCase() === kode.toLowerCase())) {
-      return NextResponse.json({ error: 'Kode produk sudah dipakai' }, { status: 400 });
+    let kode = (body?.kode || '').trim();
+    if (!kode) {
+      // Auto-generate, jamin unik walau nama sama persis dengan produk lain
+      kode = slugKode(nama);
+      while (products.some((p) => p.kode.toLowerCase() === kode.toLowerCase())) {
+        kode = slugKode(nama);
+      }
+    } else if (products.some((p) => p.kode.toLowerCase() === kode.toLowerCase())) {
+      return NextResponse.json({ error: `Kode "${kode}" sudah dipakai produk lain, pakai kode lain atau kosongkan biar dibuat otomatis` }, { status: 400 });
     }
 
     const product = {
