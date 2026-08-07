@@ -82,9 +82,9 @@ export default function KasirPage() {
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
 
-  // Kasir tidak lagi ketik nama parfum & harga manual — begitu produk dari
-  // katalog dipilih, harga per-ml otomatis ikut kategori produk itu
-  // (diatur admin/superadmin di Admin > Toko > Harga).
+  // Kasir: harga per-ml default ikut kategori produk (diatur admin di Admin >
+  // Toko > Harga), TAPI kasir tetap bisa override manual — beda dari katalog
+  // customer yang harganya baku/otomatis, tanpa bisa dipilih-pilih.
   useEffect(() => {
     if (!selectedProduct || !pricing) {
       setHargaPerMl(0);
@@ -94,13 +94,26 @@ export default function KasirPage() {
     setHargaPerMl(tier ? tier.hargaPerMl : 0);
   }, [selectedProduct, pricing]);
 
+  // Daftar pilihan harga per-ml buat override manual kasir: gabungan semua
+  // harga kategori + tier harga lama, angka unik, urut dari kecil ke besar.
+  const hargaOverrideOptions = pricing
+    ? Array.from(
+        new Set([
+          ...(pricing.categoryPrices || []).map((c) => c.hargaPerMl),
+          ...(pricing.mlTiers || []).map((t) => t.hargaPerMl),
+        ])
+      )
+        .filter((n) => n > 0)
+        .sort((a, b) => a - b)
+    : [];
+
   // Superadmin tidak terikat 1 cabang (cabangId null), jadi harus pilih
   // cabang secara manual sebelum bisa checkout. Staff/admin biasa langsung
   // pakai cabangId dari sesi login mereka.
   const effectiveCabangId = session?.cabangId || selectedCabangId || '';
 
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
-  useEffect(() => {
+  function loadStock() {
     if (!effectiveCabangId) {
       setStockMap({});
       return;
@@ -113,6 +126,22 @@ export default function KasirPage() {
         setStockMap(map);
       })
       .catch(() => setStockMap({}));
+  }
+  useEffect(loadStock, [effectiveCabangId]);
+  // Kasir sering pindah tab ke /kasir/stok buat input stok masuk lalu balik
+  // lagi ke halaman checkout ini — supaya angka "sisa stok" & status
+  // habis/tidaknya produk langsung ke-update tanpa perlu reload manual,
+  // refresh ulang begitu tab ini kembali aktif/fokus.
+  useEffect(() => {
+    function onFocus() {
+      loadStock();
+    }
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
   }, [effectiveCabangId]);
 
   async function handleLogout() {
@@ -285,6 +314,7 @@ export default function KasirPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Checkout gagal');
       setResult(data);
+      loadStock(); // stok abis laku, langsung update angkanya di katalog
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -472,12 +502,31 @@ export default function KasirPage() {
               <div className="rounded-lg bg-accentSoft p-3">
                 <p className="text-xs text-ink/70">
                   Dipilih: <span className="font-semibold text-ink">{selectedProduct.nama}</span> · Kategori:{' '}
-                  <span className="font-semibold text-ink">{selectedProduct.kategori || '—'}</span> · Harga:{' '}
-                  <span className="font-semibold text-ink">Rp{hargaPerMl.toLocaleString('id-ID')}/ml</span>
+                  <span className="font-semibold text-ink">{selectedProduct.kategori || '—'}</span>
                   {!selectedProduct.kategori && (
                     <span className="text-danger"> (produk ini belum ada kategori, set dulu di Admin → Produk)</span>
                   )}
                 </p>
+                <div className="mt-2">
+                  <label className="mb-1 block text-xs font-medium text-ink/60">
+                    Harga per Ml (otomatis dari kategori, bisa diubah manual kalau perlu)
+                  </label>
+                  <select
+                    value={hargaPerMl}
+                    onChange={(e) => setHargaPerMl(Number(e.target.value))}
+                    className="w-full rounded-lg border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-accent"
+                  >
+                    {hargaPerMl > 0 && !hargaOverrideOptions.includes(hargaPerMl) && (
+                      <option value={hargaPerMl}>Rp{hargaPerMl.toLocaleString('id-ID')}/ml (default kategori)</option>
+                    )}
+                    {hargaOverrideOptions.length === 0 && <option value={0}>Belum ada tier harga diatur admin</option>}
+                    {hargaOverrideOptions.map((h) => (
+                      <option key={h} value={h}>
+                        Rp{h.toLocaleString('id-ID')}/ml
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
             <div className="flex gap-2">
