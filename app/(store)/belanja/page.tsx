@@ -18,6 +18,7 @@ type Product = {
 type PricingConfig = {
   mlTiers: { hargaPerMl: number }[];
   bottleTiers: { minMl: number; maxMl: number; harga: number }[];
+  categoryPrices: { kategori: string; hargaPerMl: number }[];
 };
 type StoreProfile = {
   namaToko: string;
@@ -109,13 +110,24 @@ export default function BelanjaPage() {
   const bottleTiers = Array.isArray(pricing?.bottleTiers) ? pricing!.bottleTiers : [];
   const mlTiers = Array.isArray(pricing?.mlTiers) ? pricing!.mlTiers : [];
 
+  // Harga per-ml katalog customer SEKARANG OTOMATIS ikut kategori produk
+  // (sumber sama dengan yang dipakai kasir di Admin > Toko > Harga) — customer
+  // TIDAK BISA lagi pilih-pilih harga sendiri. mlTiers (tier harga lama)
+  // dipakai cuma sebagai fallback kalau produknya belum diset kategori.
+  function hargaOtomatisUntuk(p: Product | null): number {
+    if (!p) return 0;
+    const tier = pricing?.categoryPrices?.find((c) => c.kategori === p.kategori);
+    if (tier) return tier.hargaPerMl;
+    return mlTiers[0]?.hargaPerMl ?? 0;
+  }
+
   function hargaBotolUntuk(ml: number): number {
     return bottleTiers.find((t) => ml >= t.minMl && ml <= t.maxMl)?.harga ?? 0;
   }
 
   // Sisa stok beda-beda per cabang — begitu customer pilih cabang pengisian,
   // ambil sisa stok cabang itu supaya katalog nampilin angka yang sesuai.
-  useEffect(() => {
+  function loadStock() {
     if (!cabangId) {
       setStockMap({});
       return;
@@ -128,6 +140,18 @@ export default function BelanjaPage() {
         setStockMap(map);
       })
       .catch(() => setStockMap({}));
+  }
+  useEffect(loadStock, [cabangId]);
+  useEffect(() => {
+    function onFocus() {
+      loadStock();
+    }
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
   }, [cabangId]);
 
   function bukaDetail(p: Product) {
@@ -135,7 +159,7 @@ export default function BelanjaPage() {
     setPilihMl(5);
     setPilihPakaiBotol(true);
     setPilihQty(1);
-    if (mlTiers.length > 0) setPilihHargaPerMl(mlTiers[0].hargaPerMl);
+    setPilihHargaPerMl(hargaOtomatisUntuk(p));
   }
 
   function tambahDariModal() {
@@ -436,7 +460,7 @@ export default function BelanjaPage() {
                 stockMode="customer"
                 hargaHint={(p) =>
                   p.isBotol
-                    ? `mulai Rp${(mlTiers[0]?.hargaPerMl ?? 0).toLocaleString('id-ID')}/ml`
+                    ? `Rp${hargaOtomatisUntuk(p as Product).toLocaleString('id-ID')}/ml`
                     : `Rp${(p.hargaJual ?? 0).toLocaleString('id-ID')}`
                 }
                 onSelectProduct={(p) => bukaDetail(p as Product)}
@@ -679,17 +703,9 @@ export default function BelanjaPage() {
                   <p className="mt-1 text-[11px] text-ink/40">Isi bebas — tidak harus sesuai pilihan tertentu.</p>
 
                   <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-ink/50">Harga per Ml</p>
-                  <select
-                    value={pilihHargaPerMl}
-                    onChange={(e) => setPilihHargaPerMl(Number(e.target.value))}
-                    className="mt-2 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
-                  >
-                    {mlTiers.map((t) => (
-                      <option key={t.hargaPerMl} value={t.hargaPerMl}>
-                        Rp{t.hargaPerMl.toLocaleString('id-ID')} / ml
-                      </option>
-                    ))}
-                  </select>
+                  <p className="mt-2 text-lg font-semibold text-accent">
+                    Rp{pilihHargaPerMl.toLocaleString('id-ID')} <span className="text-xs font-normal text-ink/40">/ ml</span>
+                  </p>
 
                   <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-ink">
                     <input
