@@ -257,6 +257,55 @@ export async function getStockMovements(filters: {
   }));
 }
 
+// ---------- Outing Stock (keluar manual, tanpa transaksi) ----------
+
+export async function insertOutingStock(o: import('./types').OutingStock): Promise<void> {
+  const { error } = await getClient().from('outing_stock').insert({
+    id: o.id,
+    cabang_id: o.cabangId,
+    product_id: o.productId,
+    ml: o.ml,
+    tanggal: o.tanggal,
+    keterangan: o.keterangan ?? null,
+    created_by: o.createdBy,
+    created_at: o.createdAt,
+  });
+  if (error) throw new Error(`Gagal simpan outing stock: ${error.message}`);
+}
+
+export async function getOutingStock(filters: {
+  cabangId?: string;
+  productId?: string;
+  from?: string; // YYYY-MM-DD
+  to?: string; // YYYY-MM-DD
+  createdBy?: string;
+}): Promise<import('./types').OutingStock[]> {
+  let query = getClient().from('outing_stock').select('*').order('tanggal', { ascending: false });
+  if (filters.cabangId) query = query.eq('cabang_id', filters.cabangId);
+  if (filters.productId) query = query.eq('product_id', filters.productId);
+  if (filters.from) query = query.gte('tanggal', filters.from);
+  if (filters.to) query = query.lte('tanggal', filters.to);
+  if (filters.createdBy) query = query.eq('created_by', filters.createdBy);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Gagal ambil outing stock: ${error.message}`);
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    cabangId: row.cabang_id,
+    productId: row.product_id,
+    ml: Number(row.ml),
+    tanggal: row.tanggal,
+    keterangan: row.keterangan ?? undefined,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function deleteOutingStock(id: string): Promise<void> {
+  const { error } = await getClient().from('outing_stock').delete().eq('id', id);
+  if (error) throw new Error(`Gagal hapus outing stock: ${error.message}`);
+}
+
 // ---------- Stock Month Snapshot (stok awal/akhir, bulanan saja) ----------
 
 export async function upsertStockMonthSnapshot(s: import('./types').StockMonthSnapshot): Promise<void> {

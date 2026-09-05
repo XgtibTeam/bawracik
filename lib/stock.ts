@@ -9,7 +9,7 @@
 // stock_month_snapshot, dipakai buat cross-check selisih/minus riil.
 // ============================================================
 
-import { getTransactions, getStockMovements, getProducts, getStockMonthSnapshots } from './supabase';
+import { getTransactions, getStockMovements, getProducts, getStockMonthSnapshots, getOutingStock } from './supabase';
 import type { Product } from './types';
 
 export type ProductStockUsage = {
@@ -55,6 +55,26 @@ export async function getKeluarMlByProduct(params: {
   return result;
 }
 
+/**
+ * Total ml yang keluar manual (outing stock) per productId dalam rentang
+ * tanggal & cabang tertentu — dicatat manual oleh karyawan/admin TANPA
+ * lewat transaksi penjualan (mis. shift malam lupa input, testing, rusak).
+ * Digabung ke "keluar" di computeCurrentStock/computeStockRecap supaya
+ * sisa stok tetap akurat walau barang keluar bukan lewat penjualan.
+ */
+export async function getOutingMlByProduct(params: {
+  cabangId: string;
+  from: string;
+  to: string;
+}): Promise<Map<string, number>> {
+  const rows = await getOutingStock({ cabangId: params.cabangId, from: params.from, to: params.to });
+  const result = new Map<string, number>();
+  for (const r of rows) {
+    result.set(r.productId, (result.get(r.productId) || 0) + r.ml);
+  }
+  return result;
+}
+
 export type ProductStockStatus = {
   productId: string;
   nama: string;
@@ -80,12 +100,14 @@ export async function computeCurrentStock(params: { cabangId: string; asOf?: str
   prevDay.setDate(prevDay.getDate() - 1);
   const beforeMonthEnd = prevDay.toISOString().slice(0, 10);
 
-  const [products, movementsLama, movementsBulanIni, keluarLama, keluarBulanIni] = await Promise.all([
+  const [products, movementsLama, movementsBulanIni, keluarLama, keluarBulanIni, outingLama, outingBulanIni] = await Promise.all([
     getProducts(),
     getStockMovements({ cabangId: params.cabangId, from: '2000-01-01', to: beforeMonthEnd }),
     getStockMovements({ cabangId: params.cabangId, from: monthStart, to: asOf }),
     getKeluarMlByProduct({ cabangId: params.cabangId, from: '2000-01-01', to: beforeMonthEnd }),
     getKeluarMlByProduct({ cabangId: params.cabangId, from: monthStart, to: asOf }),
+    getOutingMlByProduct({ cabangId: params.cabangId, from: '2000-01-01', to: beforeMonthEnd }),
+    getOutingMlByProduct({ cabangId: params.cabangId, from: monthStart, to: asOf }),
   ]);
 
   const masukLamaMap = new Map<string, number>();
@@ -95,10 +117,10 @@ export async function computeCurrentStock(params: { cabangId: string; asOf?: str
 
   return products.map((p) => {
     const masukLama = masukLamaMap.get(p.id) || 0;
-    const keluarLamaMl = keluarLama.get(p.id) || 0;
+    const keluarLamaMl = (keluarLama.get(p.id) || 0) + (outingLama.get(p.id) || 0);
     const stokLama = Math.max(0, masukLama - keluarLamaMl);
     const stokIn = masukIniMap.get(p.id) || 0;
-    const stokOut = keluarBulanIni.get(p.id) || 0;
+    const stokOut = (keluarBulanIni.get(p.id) || 0) + (outingBulanIni.get(p.id) || 0);
     return {
       productId: p.id,
       nama: p.nama,
@@ -122,16 +144,22 @@ export async function computeStockRecap(params: {
   from: string;
   to: string;
 }): Promise<KodeStockGroup[]> {
-  const [products, movements, keluarMap] = await Promise.all([
+  const [products, movements, keluarMapJual, outingMap] = await Promise.all([
     getProducts(),
     getStockMovements({ cabangId: params.cabangId, from: params.from, to: params.to }),
     getKeluarMlByProduct(params),
+    getOutingMlByProduct(params),
   ]);
 
   const masukMap = new Map<string, number>();
   for (const m of movements) {
     masukMap.set(m.productId, (masukMap.get(m.productId) || 0) + m.ml);
   }
+  // "Keluar" gabungan: terjual (transactions) + outing stock manual, supaya
+  // rekap stok tetap akurat walau ada barang keluar bukan lewat penjualan.
+  const keluarMap = new Map<string, number>();
+  for (const [pid, ml] of keluarMapJual) keluarMap.set(pid, (keluarMap.get(pid) || 0) + ml);
+  for (const [pid, ml] of outingMap) keluarMap.set(pid, (keluarMap.get(pid) || 0) + ml);
 
   const byKode = new Map<string, Product[]>();
   for (const p of products) {
