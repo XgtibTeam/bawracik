@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { driveImageUrl } from '@/lib/drive-url';
+import OutingStockTab from '@/components/OutingStockTab';
 
 type Branch = { id: string; nama: string; alamat?: string; waCS?: string };
 type Employee = { id: string; nama: string; username: string; role: string; cabangId: string | null };
@@ -1474,6 +1475,8 @@ function rangeForPeriode(periode: RekapPeriode): { from?: string; to?: string } 
 function RekapTab() {
   const [session, setSession] = useState<Session | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [nestedTab, setNestedTab] = useState<'penjualan' | 'outing'>('penjualan');
   const [periode, setPeriode] = useState<RekapPeriode>('harian');
   const [cabangId, setCabangId] = useState('');
   const [data, setData] = useState<any>(null);
@@ -1485,6 +1488,7 @@ function RekapTab() {
   useEffect(() => {
     fetch('/api/auth/me').then((r) => r.json()).then((d) => setSession(d.session));
     fetch('/api/branches').then((r) => r.json()).then((d) => setBranches(d.branches || []));
+    fetch('/api/products').then((r) => r.json()).then((d) => setProducts(d.products || []));
   }, []);
 
   useEffect(() => {
@@ -1609,13 +1613,59 @@ function RekapTab() {
     }
   }
 
-  if (!data) return <p className="text-sm text-ink/50">Memuat...</p>;
-  if (data.error) return <p className="text-sm text-danger">{data.error}</p>;
+  const nestedSwitcher = (
+    <div className="ticket flex gap-2 p-3">
+      {(
+        [
+          ['penjualan', 'Penjualan'],
+          ['outing', 'Outing Stock'],
+        ] as const
+      ).map(([key, label]) => (
+        <button
+          key={key}
+          onClick={() => setNestedTab(key)}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${
+            nestedTab === key ? 'bg-accent text-white' : 'bg-paper text-ink/60'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (nestedTab === 'outing') {
+    return (
+      <div className="space-y-4">
+        {nestedSwitcher}
+        <OutingStockTab
+          mode="admin"
+          products={products}
+          currentUsername={session?.username}
+          cabangId={isSuperadmin ? cabangId || undefined : session?.cabangId ?? undefined}
+        />
+      </div>
+    );
+  }
+
+  if (!data) return (
+    <div className="space-y-4">
+      {nestedSwitcher}
+      <p className="text-sm text-ink/50">Memuat...</p>
+    </div>
+  );
+  if (data.error) return (
+    <div className="space-y-4">
+      {nestedSwitcher}
+      <p className="text-sm text-danger">{data.error}</p>
+    </div>
+  );
 
   const maxOrder = Math.max(...data.bestSeller.map((b: any) => b.jumlahOrder), 1);
 
   return (
     <div className="space-y-4">
+      {nestedSwitcher}
       <div className="ticket flex flex-wrap items-center gap-2 p-3">
         {(['harian', 'bulanan', 'tahunan', 'semua'] as RekapPeriode[]).map((p) => (
           <button
