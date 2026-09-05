@@ -241,6 +241,24 @@ export type StockMonthSnapshot = {
   updatedAt: string;
 };
 
+// ---------- OUTING STOK (Supabase table: outing_stock) ----------
+// Pencatatan MANUAL produk yang keluar dari stok TANPA lewat transaksi
+// penjualan (mis. dipakai testing, rusak/tumpah, dibawa kasir shift malam
+// yang lupa input sebagai penjualan resmi, dsb). Sengaja TIDAK terikat ke
+// tabel transactions — supaya karyawan bisa input kapan saja, termasuk
+// untuk tanggal yang sudah lewat (shift malam yang baru sempat input
+// besoknya), dan tanggalnya bebas dipilih sendiri.
+export type OutingStock = {
+  id: string;
+  cabangId: string;
+  productId: string;
+  ml: number; // jumlah yang keluar, dalam ml
+  tanggal: string; // YYYY-MM-DD, tanggal kejadian (boleh diubah manual, tidak harus hari ini)
+  keterangan?: string; // alasan/catatan opsional (mis. "testing customer", "tumpah")
+  createdBy: string; // username staff yang input
+  createdAt: string;
+};
+
 // ---------- PESANAN / ORDER SELF-CHECKOUT (Supabase table: pesanan) ----------
 // Saat customer checkout sendiri (self-checkout) lewat halaman /belanja,
 // TIDAK langsung jadi Transaction — cuma jadi Pesanan berstatus 'pending'
