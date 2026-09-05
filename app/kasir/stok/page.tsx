@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import DataHarianTab from '@/components/DataHarianTab';
 
 type Session = { role: string; nama: string; cabangId: string | null; username: string };
 type Product = { id: string; nama: string; kode: string };
@@ -30,6 +31,7 @@ function rangeForPeriode(periode: Periode, tanggal: string): { from: string; to:
 }
 
 export default function StokKasirPage() {
+  const [mainTab, setMainTab] = useState<'stok' | 'harian'>('stok');
   const [session, setSession] = useState<Session | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
 
@@ -146,6 +148,30 @@ export default function StokKasirPage() {
   return (
     <main className="mx-auto max-w-md space-y-4 px-4 py-6">
       <h1 className="font-display text-lg font-semibold text-ink">Stok Cabang</h1>
+
+      <div className="ticket flex gap-2 p-3">
+        {(
+          [
+            ['stok', 'Stok'],
+            ['harian', 'Data Harian'],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setMainTab(key)}
+            className={`flex-1 rounded-lg py-2 text-xs font-semibold ${
+              mainTab === key ? 'bg-accent text-white' : 'bg-paper text-ink/60'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mainTab === 'harian' && <DataHarianTab session={session} products={products} />}
+
+      {mainTab === 'stok' && (
+      <>
       <p className="-mt-2 text-xs text-ink/50">
         Input stok baru datang dalam KG — sistem otomatis mengonversi ke ML (1 kg = 1000 ml). Stok berkurang otomatis
         mengikuti penjualan harian, bulanan, dan tahunan.
@@ -384,6 +410,8 @@ export default function StokKasirPage() {
             {savingSnapshot ? 'Menyimpan...' : 'Simpan Stok Awal/Akhir'}
           </button>
         </div>
+      )}
+      </>
       )}
     </main>
   );
