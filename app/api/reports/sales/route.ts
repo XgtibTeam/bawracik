@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
 import { getTransactions } from '@/lib/supabase';
+import { getEmployees } from '@/lib/jsonbin';
 
 // GET /api/reports/sales?from=&to=&cabangId=
 // - kasir: hanya rekap transaksi miliknya sendiri
@@ -27,7 +28,11 @@ export async function GET(req: NextRequest) {
 
     const karyawanId = session.role === 'kasir' ? session.username : undefined;
 
-    const transactions = await getTransactions({ cabangId, karyawanId, from, to });
+    const [transactions, employees] = await Promise.all([
+      getTransactions({ cabangId, karyawanId, from, to }),
+      getEmployees(),
+    ]);
+    const namaKaryawan = new Map(employees.map((e) => [e.username, e.nama]));
 
     const totalMl = transactions.reduce((s, t) => s + t.totalMl, 0);
     const totalPendapatan = transactions.reduce((s, t) => s + t.totalHarga, 0);
@@ -50,18 +55,23 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.jumlahOrder - a.jumlahOrder)
       .slice(0, 10);
 
-    // Rekap per karyawan (kalau admin/superadmin lihat semua karyawan di cabangnya)
-    const perKaryawanMap = new Map<string, { totalMl: number; totalPendapatan: number }>();
+    // Rekap per karyawan (kalau admin/superadmin lihat semua karyawan di
+    // cabangnya) — key tetap pakai username (unik), tapi label yang
+    // ditampilkan pakai nama asli karyawan, bukan username-nya.
+    const perKaryawanMap = new Map<string, { nama: string; totalMl: number; totalPendapatan: number }>();
     for (const t of transactions) {
       const key = t.karyawanId || '(self-checkout)';
-      const cur = perKaryawanMap.get(key) || { totalMl: 0, totalPendapatan: 0 };
+      const nama = t.karyawanId ? namaKaryawan.get(t.karyawanId) || t.karyawanId : '(self-checkout)';
+      const cur = perKaryawanMap.get(key) || { nama, totalMl: 0, totalPendapatan: 0 };
       cur.totalMl += t.totalMl;
       cur.totalPendapatan += t.totalHarga;
       perKaryawanMap.set(key, cur);
     }
-    const perKaryawan = Array.from(perKaryawanMap.entries()).map(([karyawan, v]) => ({
-      karyawan,
-      ...v,
+    const perKaryawan = Array.from(perKaryawanMap.entries()).map(([username, v]) => ({
+      karyawan: v.nama,
+      username,
+      totalMl: v.totalMl,
+      totalPendapatan: v.totalPendapatan,
     }));
 
     return NextResponse.json({
