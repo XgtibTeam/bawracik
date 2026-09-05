@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
 import { getProducts, saveProducts } from '@/lib/supabase';
+import type { Product } from '@/lib/types';
 
 // Auto-generate kode dari nama kalau kolom kode dikosongkan di form Tambah
 // Produk Manual (dulu tidak ada fallback ini — cuma ada di jalur import
@@ -12,6 +14,44 @@ function slugKode(nama: string): string {
     .replace(/(^-|-$)/g, '')
     .slice(0, 20);
   return `${slug || 'produk'}-${Date.now().toString(36)}`;
+}
+
+// Dipakai buat cek "nama mirip DALAM kode yang sama" (mis. kode sudah ada
+// "Scandalous", lalu ada yang mau tambah "VS Scandalous" di kode YANG SAMA
+// — dianggap produk yang sama, harus ditolak). TIDAK berlaku lintas kode:
+// kode lain boleh punya nama "Scandalous"-nya sendiri.
+function normalizeNama(nama: string): string {
+  return nama
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// true kalau salah satu nama (setelah dinormalisasi) "mengandung" nama yang
+// lain secara utuh per kata (bukan cuma exact match) — supaya "VS
+// Scandalous" ketangkep sebagai produk yang sama dengan "Scandalous".
+function isSameProductName(a: string, b: string): boolean {
+  const na = normalizeNama(a);
+  const nb = normalizeNama(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const wordsA = new Set(na.split(' '));
+  const wordsB = new Set(nb.split(' '));
+  const [shorter, shorterWords, longer] = na.length <= nb.length ? [na, wordsA, nb] : [nb, wordsB, na];
+  // "mengandung" hanya dianggap sama produk kalau kata inti (kata terakhir/
+  // paling khas dari nama yang lebih pendek) memang muncul utuh di nama
+  // yang lebih panjang — mencegah false-positive nama pendek yang kebetulan
+  // jadi substring nama lain yang sebenarnya beda produk.
+  const coreWord = Array.from(shorterWords).sort((x, y) => y.length - x.length)[0];
+  if (!coreWord || coreWord.length < 4) return false;
+  return longer.includes(coreWord) && longer.includes(shorter);
+}
+
+function findDuplicateInKode(products: Product[], nama: string, kode: string): Product | undefined {
+  const kodeNorm = kode.trim().toLowerCase();
+  return products.find((p) => (p.kode || '').trim().toLowerCase() === kodeNorm && isSameProductName(p.nama, nama));
 }
 
 // Route ini SELALU dijalankan dinamis (bukan di-cache statis Next.js) —
@@ -29,7 +69,9 @@ export async function GET() {
   }
 }
 
-// Auth (superadmin/admin) sudah dicek middleware.ts
+// Auth (superadmin/admin/kasir) sudah dicek middleware.ts — karyawan (kasir)
+// boleh POST supaya bisa nambah produk sendiri dari halaman Data Harian,
+// tapi dicek duplikat DALAM SATU KODE PRODUK saja (lihat findDuplicateInKode).
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -41,12 +83,20 @@ export async function POST(req: NextRequest) {
     const products = await getProducts();
     // PENTING: sama seperti jalur import (lihat api/products/import/route.ts)
     // — `kode` adalah kode SERI/grup, BUKAN SKU unik, jadi boleh dipakai
-    // bareng-bareng oleh banyak nama parfum. Yang tidak boleh duplikat itu
-    // `nama`, bukan `kode`. Kode otomatis dibuat dari nama kalau dikosongkan.
+    // bareng-bareng oleh banyak nama parfum. Duplikat dicek per-KODE: nama
+    // yang mirip/sama HANYA ditolak kalau kode-nya juga sama; kode lain
+    // tetap boleh punya nama serupa (mis. "Scandalous" ada di beberapa kode).
     let kode = (body?.kode || '').trim();
     if (!kode) kode = slugKode(nama);
-    if (products.some((p) => p.nama.trim().toLowerCase() === nama.toLowerCase())) {
-      return NextResponse.json({ error: `Produk dengan nama "${nama}" sudah ada` }, { status: 400 });
+    const dupe = findDuplicateInKode(products, nama, kode);
+    if (dupe) {
+      return NextResponse.json(
+        {
+          error: `Produk "${dupe.nama}" sudah ada di kode "${dupe.kode}". Kalau memang parfum baru yang beda, pakai kode lain.`,
+          duplicate: { id: dupe.id, nama: dupe.nama, kode: dupe.kode },
+        },
+        { status: 409 }
+      );
     }
 
     const product = {
