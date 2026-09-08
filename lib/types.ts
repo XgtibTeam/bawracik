@@ -182,6 +182,7 @@ export type Transaction = {
   totalHarga: number;
   biayaBotol: number; // dari bottleTiers, sudah termasuk di totalHarga
   ukuranBotolMl?: number; // ukuran botol GLOBAL (satu botol utk seluruh keranjang, dipilih di halaman kasir) — dipakai buat rekonstruksi baris "BOTOL" di Data Harian
+  namaBotol?: string; // nama/label botol yang dipilih kasir (mis. "SP 30 Matte Black") — kalau kosong, Data Harian fallback ke "Botol {ukuranBotolMl}ml"
   tipe: 'grosir' | 'ecer';
   metodeCheckout: 'kasir' | 'self';
   voucherCode?: string;

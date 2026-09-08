@@ -41,6 +41,7 @@ export default function KasirPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
 
   const [pakaiBotol, setPakaiBotol] = useState(false);
+  const [namaBotol, setNamaBotol] = useState('');
   const [ukuranBotolMl, setUkuranBotolMl] = useState<number>(5);
 
   const [tipe, setTipe] = useState<'ecer' | 'grosir'>('ecer');
@@ -192,6 +193,17 @@ export default function KasirPage() {
       .catch(() => setStockMap({}));
   }
   useEffect(loadStock, [effectiveCabangId]);
+
+  async function handleRestock(productId: string, ml: number) {
+    const res = await fetch('/api/stock-topup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId, ml, cabangId: effectiveCabangId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Gagal menambah stok');
+    loadStock();
+  }
   // Kasir sering pindah tab ke /kasir/stok buat input stok masuk lalu balik
   // lagi ke halaman checkout ini — supaya angka "sisa stok" & status
   // habis/tidaknya produk langsung ke-update tanpa perlu reload manual,
@@ -365,6 +377,7 @@ export default function KasirPage() {
           cabangId: effectiveCabangId,
           items: cart,
           ukuranBotolMl: pakaiBotol ? ukuranBotolMl : undefined,
+          namaBotol: pakaiBotol ? namaBotol.trim() || undefined : undefined,
           tipe,
           member:
             tipe === 'ecer'
@@ -583,6 +596,7 @@ export default function KasirPage() {
               }}
               onSelectProduct={(p) => setSelectedProductId(p.id)}
               onAddNewProduct={bukaFormTambahProduk}
+              onRestock={handleRestock}
             />
             {tambahProdukOpen && (
               <div className="space-y-2 rounded-lg border border-dashed border-accent/40 bg-accentSoft/40 p-3">
@@ -722,7 +736,13 @@ export default function KasirPage() {
               Pakai Botol
             </label>
             {pakaiBotol && (
-              <div>
+              <div className="space-y-2">
+                <input
+                  value={namaBotol}
+                  onChange={(e) => setNamaBotol(e.target.value)}
+                  className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+                  placeholder="Nama botol, mis. SP 30 Matte Black"
+                />
                 <input
                   type="number"
                   value={ukuranBotolMl}
@@ -730,7 +750,7 @@ export default function KasirPage() {
                   className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
                   placeholder="Ukuran botol (ml)"
                 />
-                <p className="mt-1 text-xs text-ink/50">Biaya botol: Rp{biayaBotol.toLocaleString('id-ID')}</p>
+                <p className="text-xs text-ink/50">Biaya botol: Rp{biayaBotol.toLocaleString('id-ID')}</p>
               </div>
             )}
           </div>
@@ -771,7 +791,7 @@ export default function KasirPage() {
               ))}
               {pakaiBotol && (
                 <li className="flex justify-between py-2">
-                  <span>Botol {ukuranBotolMl}ml</span>
+                  <span>{namaBotol.trim() || `Botol ${ukuranBotolMl}ml`}</span>
                   <span>Rp{biayaBotol.toLocaleString('id-ID')}</span>
                 </li>
               )}

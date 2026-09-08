@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import * as XLSX from 'xlsx';
 
 type Session = { role: string; nama: string; cabangId: string | null; username: string };
 type ParfumRow = { namaParfum: string; kode: string; ml: number; hargaPerMl: number; harga: number; susulan?: boolean };
@@ -115,6 +114,13 @@ export default function DataHarianTab({ session }: { session: Session | null }) 
   const [tanggal, setTanggal] = useState(todayStr());
   const [data, setData] = useState<DailyData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Export sengaja punya rentang tanggal SENDIRI (default: dari - sampai
+  // tanggal yang lagi dilihat), karena hasilnya buat dicetak & dipotong per
+  // hari — jadi wajar kalau mau export beberapa hari sekaligus (misal
+  // seminggu), bukan cuma satu hari yang lagi ditampilkan di layar.
+  const [exportFrom, setExportFrom] = useState(todayStr());
+  const [exportTo, setExportTo] = useState(todayStr());
   const [exporting, setExporting] = useState(false);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
 
@@ -127,73 +133,36 @@ export default function DataHarianTab({ session }: { session: Session | null }) 
       .finally(() => setLoading(false));
   }
   useEffect(load, [tanggal]);
+  useEffect(() => {
+    setExportFrom(tanggal);
+    setExportTo(tanggal);
+  }, [tanggal]);
 
-  // Export ke Excel — 3 sheet (REFILL / BOTOL / SERIES), kolom & urutan
-  // persis kayak file rekap manual yang dulu dipakai, tinggal print/kirim.
-  function exportExcel() {
-    if (!data) return;
+  // Export ke Excel — setiap TANGGAL dapet kotak/blok sendiri dengan garis
+  // tabel penuh (REFILL / BOTOL / SERIES + sheet Total Akumulasi), disusun
+  // ke bawah satu-satu — jadi tinggal print & gunting antar blok, gak perlu
+  // dipisah manual lagi.
+  async function exportExcel() {
     setExporting(true);
     setExportMsg(null);
     try {
-      const wb = XLSX.utils.book_new();
-      const namaFile = data.namaKaryawan || session?.nama || 'Karyawan';
-      const judul = `Data Harian — ${namaFile} — ${data.tanggal}`;
-      const dicetak = `Dicetak: ${new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })}`;
-
-      // ---- Sheet REFILL ----
-      const aoaRefill: any[][] = [
-        [judul],
-        [dicetak],
-        [],
-        ['NAMA PARFUM', 'PRODUK', 'ML', 'PER ML', 'HARGA'],
-      ];
-      for (const r of data.refill.rows) {
-        aoaRefill.push([r.namaParfum + (r.susulan ? ' (susulan)' : ''), r.kode, r.ml, r.hargaPerMl, r.harga]);
+      const params = new URLSearchParams({ from: exportFrom, to: exportTo });
+      const res = await fetch(`/api/reports/daily-export?${params.toString()}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Gagal export.');
       }
-      aoaRefill.push(['TOTAL', '', data.refill.totalMl, '', data.refill.totalHarga]);
-      const wsRefill = XLSX.utils.aoa_to_sheet(aoaRefill);
-      wsRefill['!cols'] = [{ wch: 28 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 14 }];
-      wsRefill['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
-      ];
-      XLSX.utils.book_append_sheet(wb, wsRefill, 'REFILL');
-
-      // ---- Sheet BOTOL ----
-      const aoaBotol: any[][] = [[judul], [dicetak], [], ['NAMA BOTOL', 'PCS', 'HARGA JUAL']];
-      for (const r of data.botol.rows) {
-        aoaBotol.push([r.namaBotol, r.pcs, r.hargaJual]);
-      }
-      aoaBotol.push(['TOTAL', data.botol.totalPcs, data.botol.totalHarga]);
-      const wsBotol = XLSX.utils.aoa_to_sheet(aoaBotol);
-      wsBotol['!cols'] = [{ wch: 22 }, { wch: 10 }, { wch: 14 }];
-      wsBotol['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },
-      ];
-      XLSX.utils.book_append_sheet(wb, wsBotol, 'BOTOL');
-
-      // ---- Sheet SERIES ----
-      const aoaSeries: any[][] = [
-        [judul],
-        [dicetak],
-        [],
-        ['NAMA PARFUM', 'PRODUK', 'ML', 'PER ML', 'HARGA'],
-      ];
-      for (const r of data.series.rows) {
-        aoaSeries.push([r.namaParfum + (r.susulan ? ' (susulan)' : ''), r.kode, r.ml, r.hargaPerMl, r.harga]);
-      }
-      aoaSeries.push(['TOTAL', '', data.series.totalMl, '', data.series.totalHarga]);
-      const wsSeries = XLSX.utils.aoa_to_sheet(aoaSeries);
-      wsSeries['!cols'] = [{ wch: 28 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 14 }];
-      wsSeries['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
-      ];
-      XLSX.utils.book_append_sheet(wb, wsSeries, 'SERIES');
-
-      XLSX.writeFile(wb, `Data-Harian-${namaFile.replace(/\s+/g, '-')}-${data.tanggal}.xlsx`);
-      setExportMsg('Berhasil di-export.');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="(.+)"/);
+      a.download = match ? match[1] : `Data-Harian-${exportFrom}_${exportTo}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } catch (err: any) {
       setExportMsg(err.message || 'Gagal export.');
     } finally {
@@ -247,16 +216,46 @@ export default function DataHarianTab({ session }: { session: Session | null }) 
                 {data.grandTotalMl.toLocaleString('id-ID')} ml — Rp{data.grandTotalHarga.toLocaleString('id-ID')}
               </span>
             </div>
-            <button
-              onClick={exportExcel}
-              disabled={exporting}
-              className="w-full rounded-lg bg-ink/90 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {exporting ? 'Menyiapkan file...' : '⬇️ Export ke Excel (.xlsx)'}
-            </button>
-            {exportMsg && <p className="text-center text-xs text-accent">{exportMsg}</p>}
           </>
         )}
+      </div>
+
+      <div className="ticket space-y-2 p-4">
+        <h2 className="font-display text-sm font-semibold text-ink">Export ke Excel (siap print)</h2>
+        <p className="-mt-1 text-[11px] text-ink/40">
+          Tiap tanggal dapet kotak sendiri dengan garis tabel penuh — tinggal print & gunting antar kotak. Ada juga
+          sheet "Total Akumulasi" (total ml terjual, digabung se-rentang tanggal).
+        </p>
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="mb-1 block text-[11px] text-ink/50">Dari</label>
+            <input
+              type="date"
+              value={exportFrom}
+              onChange={(e) => setExportFrom(e.target.value)}
+              max={todayStr()}
+              className="w-full rounded-lg border border-ink/15 px-2 py-1.5 text-xs outline-none focus:border-accent"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="mb-1 block text-[11px] text-ink/50">Sampai</label>
+            <input
+              type="date"
+              value={exportTo}
+              onChange={(e) => setExportTo(e.target.value)}
+              max={todayStr()}
+              className="w-full rounded-lg border border-ink/15 px-2 py-1.5 text-xs outline-none focus:border-accent"
+            />
+          </div>
+        </div>
+        <button
+          onClick={exportExcel}
+          disabled={exporting}
+          className="w-full rounded-lg bg-ink/90 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {exporting ? 'Menyiapkan file...' : '⬇️ Export ke Excel (.xlsx)'}
+        </button>
+        {exportMsg && <p className="text-center text-xs text-danger">{exportMsg}</p>}
       </div>
     </div>
   );

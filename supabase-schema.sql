@@ -11,6 +11,7 @@ create table if not exists transactions (
   total_harga numeric not null default 0,
   biaya_botol numeric not null default 0,
   ukuran_botol_ml numeric,          -- botol GLOBAL sekeranjang (dipilih di halaman kasir), null kalau tidak pakai
+  nama_botol text,                  -- label botol (mis. "SP 30 Matte Black"), opsional
   tipe text not null check (tipe in ('grosir', 'ecer')),
   metode_checkout text not null check (metode_checkout in ('kasir', 'self')),
   voucher_code text,
@@ -28,6 +29,7 @@ create index if not exists idx_transactions_created_at on transactions (created_
 -- ke tabel lama — jalankan 2 baris ini juga, aman dijalankan berkali-kali):
 alter table transactions add column if not exists ukuran_botol_ml numeric;
 alter table transactions add column if not exists susulan boolean not null default false;
+alter table transactions add column if not exists nama_botol text;
 
 create table if not exists stock_recap (
   id text primary key,

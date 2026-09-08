@@ -17,6 +17,7 @@ export type FinalizeCheckoutInput = {
   cabangId: string;
   items: ChargeableItem[];
   ukuranBotolMl?: number;
+  namaBotol?: string;
   tipe: 'grosir' | 'ecer';
   member?: { id?: string; wa?: string; nama?: string };
   voucherCode?: string;
@@ -154,6 +155,7 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput) {
     totalHarga: totalSetelahDiskon,
     biayaBotol: calc.biayaBotol,
     ukuranBotolMl: input.ukuranBotolMl,
+    namaBotol: input.namaBotol,
     tipe: input.tipe,
     metodeCheckout: input.metodeCheckout,
     voucherCode,

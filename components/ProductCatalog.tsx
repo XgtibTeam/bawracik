@@ -23,6 +23,7 @@ export default function ProductCatalog({
   hargaHint,
   onSelectProduct,
   onAddNewProduct,
+  onRestock,
 }: {
   products: CatalogProduct[];
   /** sisa stok per productId — customer cuma butuh tau ada/habis, kasir butuh angka pastinya */
@@ -35,9 +36,36 @@ export default function ProductCatalog({
    * produk yang dicari tidak ketemu, dipanggil dengan teks pencarian
    * sebagai nama awal. Tidak dipakai di katalog customer. */
   onAddNewProduct?: (namaAwal: string) => void;
+  /** Kalau diisi (mode kasir): tampilkan tombol "+ Isi Stok Jual" saat sisa
+   * stok produk itu 0 — karyawan input berapa ml mau ditambah sendiri
+   * (topup cepat, bukan pengganti stok resmi admin), dipanggil dengan
+   * (productId, ml) dan HARUS resolve setelah stok berhasil ditambah biar
+   * tombolnya balik ke tampilan normal & sisa stok ke-refresh. */
+  onRestock?: (productId: string, ml: number) => Promise<void>;
 }) {
   const [cari, setCari] = useState('');
   const [kategori, setKategori] = useState('');
+  const [restockingId, setRestockingId] = useState<string | null>(null);
+  const [restockMl, setRestockMl] = useState('');
+  const [restockSubmitting, setRestockSubmitting] = useState(false);
+  const [restockError, setRestockError] = useState<string | null>(null);
+
+  async function submitRestock(productId: string) {
+    if (!onRestock) return;
+    const ml = Number(restockMl);
+    if (!ml || ml <= 0) return setRestockError('Isi jumlah ml dulu.');
+    setRestockSubmitting(true);
+    setRestockError(null);
+    try {
+      await onRestock(productId, ml);
+      setRestockingId(null);
+      setRestockMl('');
+    } catch (err: any) {
+      setRestockError(err.message || 'Gagal menambah stok.');
+    } finally {
+      setRestockSubmitting(false);
+    }
+  }
 
   const filtered = products.filter((p) => {
     const matchCari = cari.trim()
@@ -98,39 +126,86 @@ export default function ProductCatalog({
             const img = driveImageUrl(p.imageDriveId);
             const sisa = stockMap ? stockMap[p.id] : undefined;
             const habis = sisa !== undefined && sisa <= 0;
+            const bisaTopup = habis && stockMode === 'kasir' && !!onRestock;
+            const sedangRestock = restockingId === p.id;
             return (
-              <button
+              <div
                 key={p.id}
-                onClick={() => onSelectProduct(p)}
-                disabled={habis}
-                className="ticket flex flex-col overflow-hidden p-0 text-left transition hover:-translate-y-0.5 disabled:opacity-50"
+                className="ticket flex flex-col overflow-hidden p-0 text-left transition hover:-translate-y-0.5"
               >
-                <div className="aspect-square w-full bg-paper">
-                  {img ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={img} alt={p.nama} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-2xl">🧴</div>
-                  )}
-                </div>
-                <div className="p-2.5">
-                  <p className="line-clamp-1 text-sm font-semibold text-ink">{p.nama}</p>
-                  <p className="mt-0.5 line-clamp-2 text-xs text-ink/50">
-                    {p.deskripsi || (p.isBotol ? 'Parfum isi ulang' : 'Produk')}
-                  </p>
-                  {hargaHint && <p className="mt-1.5 text-xs font-semibold text-accent">{hargaHint(p)}</p>}
-                  {sisa !== undefined && stockMode === 'kasir' && (
-                    <p className={`mt-1 text-[10px] font-semibold ${habis ? 'text-danger' : 'text-ink/40'}`}>
-                      Sisa stok: {habis ? 'Habis' : `${sisa.toLocaleString('id-ID')} ml`}
+                <button
+                  onClick={() => onSelectProduct(p)}
+                  disabled={habis}
+                  className="flex flex-col text-left disabled:opacity-50"
+                >
+                  <div className="aspect-square w-full bg-paper">
+                    {img ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={img} alt={p.nama} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-2xl">🧴</div>
+                    )}
+                  </div>
+                  <div className="p-2.5 pb-1">
+                    <p className="line-clamp-1 text-sm font-semibold text-ink">{p.nama}</p>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-ink/50">
+                      {p.deskripsi || (p.isBotol ? 'Parfum isi ulang' : 'Produk')}
                     </p>
-                  )}
-                  {sisa !== undefined && stockMode === 'customer' && (
-                    <p className={`mt-1 text-[10px] font-semibold ${habis ? 'text-danger' : 'text-accent'}`}>
-                      {habis ? 'Stok Habis' : 'Stok Tersedia'}
-                    </p>
-                  )}
-                </div>
-              </button>
+                    {hargaHint && <p className="mt-1.5 text-xs font-semibold text-accent">{hargaHint(p)}</p>}
+                    {sisa !== undefined && stockMode === 'kasir' && (
+                      <p className={`mt-1 text-[10px] font-semibold ${habis ? 'text-danger' : 'text-ink/40'}`}>
+                        Sisa stok: {habis ? 'Habis' : `${sisa.toLocaleString('id-ID')} ml`}
+                      </p>
+                    )}
+                    {sisa !== undefined && stockMode === 'customer' && (
+                      <p className={`mt-1 text-[10px] font-semibold ${habis ? 'text-danger' : 'text-accent'}`}>
+                        {habis ? 'Stok Habis' : 'Stok Tersedia'}
+                      </p>
+                    )}
+                  </div>
+                </button>
+
+                {bisaTopup && !sedangRestock && (
+                  <button
+                    onClick={() => {
+                      setRestockingId(p.id);
+                      setRestockMl('');
+                      setRestockError(null);
+                    }}
+                    className="mx-2.5 mb-2.5 rounded-lg border border-dashed border-accent/50 py-1.5 text-[11px] font-semibold text-accent"
+                  >
+                    + Isi Stok Jual
+                  </button>
+                )}
+                {bisaTopup && sedangRestock && (
+                  <div className="mx-2.5 mb-2.5 space-y-1.5">
+                    <input
+                      type="number"
+                      autoFocus
+                      value={restockMl}
+                      onChange={(e) => setRestockMl(e.target.value)}
+                      placeholder="ml"
+                      className="w-full rounded-lg border border-accent/40 px-2 py-1 text-xs outline-none"
+                    />
+                    {restockError && <p className="text-[10px] text-danger">{restockError}</p>}
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setRestockingId(null)}
+                        className="flex-1 rounded-lg border border-ink/15 py-1 text-[10px] text-ink/50"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        onClick={() => submitRestock(p.id)}
+                        disabled={restockSubmitting}
+                        className="flex-1 rounded-lg bg-accent py-1 text-[10px] font-semibold text-white disabled:opacity-50"
+                      >
+                        {restockSubmitting ? '...' : 'Simpan'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>

@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
     const cabangId = body?.cabangId || session.cabangId;
     const items: ChargeableItem[] = body?.items;
     const ukuranBotolMl = body?.ukuranBotolMl ? Number(body.ukuranBotolMl) : undefined;
+    const namaBotol = typeof body?.namaBotol === 'string' && body.namaBotol.trim() ? body.namaBotol.trim() : undefined;
     const tipe: 'grosir' | 'ecer' = body?.tipe === 'grosir' ? 'grosir' : 'ecer';
     // Input SUSULAN (lupa input kemarin/tanggal lain) — sengaja hanya bisa
     // dipakai dari sini (checkout kasir/admin/superadmin yang sudah login &
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
       cabangId,
       items,
       ukuranBotolMl,
+      namaBotol,
       tipe,
       member: tipe === 'ecer' ? body?.member : undefined,
       voucherCode: body?.voucherCode || undefined,
