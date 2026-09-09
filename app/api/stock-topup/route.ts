@@ -5,15 +5,16 @@ import { insertStockMovement } from '@/lib/supabase';
 
 // POST /api/stock-topup
 //
-// "Stok Jual" manual — beda dari /api/stock-movements (yang itu buat admin
-// input stok BULANAN dalam KG pas barang baru datang dari supplier).
-// Endpoint ini buat KARYAWAN sendiri, langsung dalam ML, waktu produk yang
-// mau dijual kehabisan di tengah jualan tapi stok fisiknya sebenarnya masih
-// ada (cuma belum sempat diinput admin) — biar nggak macet di kasir.
+// Input "Stok Jual" langsung oleh KARYAWAN/kasir, dalam ML — beda dari
+// /api/stock-movements (itu input stok BULANAN dalam KG, khusus admin).
+// Sekarang bisa dipakai KAPAN AJA (bukan cuma pas produk kehabisan) —
+// setiap kali dipanggil, langsung nambah ke ledger stock_movements dan
+// langsung kehitung sebagai sisa/stok jual di computeCurrentStock(), tanpa
+// approval atau jeda: "stok in = stok jual", satu langkah.
 //
-// Sengaja dibatasi jumlahnya per submit (maksimal 2000ml) supaya ini tetap
-// jadi "topup cepat buat lanjut jualan", bukan pengganti input stok resmi
-// admin yang bulanan.
+// Batas 2000ml per submit TETAP dipertahankan sebagai guard anti salah-ketik
+// (bukan pembatas alur) — buat jumlah besar, karyawan tinggal submit
+// berkali-kali dan tiap submit tetap langsung nambah stok jual seketika.
 export const dynamic = 'force-dynamic';
 
 const MAX_ML_PER_TOPUP = 2000;
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
     if (!ml || ml <= 0) return NextResponse.json({ error: 'Jumlah ml harus lebih dari 0' }, { status: 400 });
     if (ml > MAX_ML_PER_TOPUP) {
       return NextResponse.json(
-        { error: `Maksimal ${MAX_ML_PER_TOPUP}ml sekali topup — kalau lebih dari itu, minta admin input stok resmi.` },
+        { error: `Maksimal ${MAX_ML_PER_TOPUP}ml sekali submit — kalau lebih, submit lagi beberapa kali, langsung kehitung ke stok jual tiap submit.` },
         { status: 400 }
       );
     }

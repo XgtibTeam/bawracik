@@ -36,11 +36,12 @@ export default function ProductCatalog({
    * produk yang dicari tidak ketemu, dipanggil dengan teks pencarian
    * sebagai nama awal. Tidak dipakai di katalog customer. */
   onAddNewProduct?: (namaAwal: string) => void;
-  /** Kalau diisi (mode kasir): tampilkan tombol "+ Isi Stok Jual" saat sisa
-   * stok produk itu 0 — karyawan input berapa ml mau ditambah sendiri
-   * (topup cepat, bukan pengganti stok resmi admin), dipanggil dengan
-   * (productId, ml) dan HARUS resolve setelah stok berhasil ditambah biar
-   * tombolnya balik ke tampilan normal & sisa stok ke-refresh. */
+  /** Kalau diisi (mode kasir): tampilkan tombol "+ Tambah Stok" di SETIAP
+   * produk (bukan cuma pas habis) — karyawan input berapa ml mau ditambah
+   * sendiri, dipanggil dengan (productId, ml) dan HARUS resolve setelah
+   * stok berhasil ditambah biar sisa stok ke-refresh. Sengaja tidak
+   * digantung pada kondisi habis lagi: stok in dari karyawan harus langsung
+   * jadi stok jual kapan pun, bukan cuma dibolehkan pas kepepet 0. */
   onRestock?: (productId: string, ml: number) => Promise<void>;
 }) {
   const [cari, setCari] = useState('');
@@ -126,7 +127,11 @@ export default function ProductCatalog({
             const img = driveImageUrl(p.imageDriveId);
             const sisa = stockMap ? stockMap[p.id] : undefined;
             const habis = sisa !== undefined && sisa <= 0;
-            const bisaTopup = habis && stockMode === 'kasir' && !!onRestock;
+            // Dulu cuma nyala kalau `habis` — sekarang selalu nyala di mode
+            // kasir biar karyawan bisa nambah stok kapan aja, gak cuma pas
+            // stoknya udah 0 (biar gak ada lagi jeda "stok numpuk" nunggu
+            // admin input resmi sebelum bisa dijual).
+            const bisaTopup = stockMode === 'kasir' && !!onRestock;
             const sedangRestock = restockingId === p.id;
             return (
               <div
@@ -174,7 +179,7 @@ export default function ProductCatalog({
                     }}
                     className="mx-2.5 mb-2.5 rounded-lg border border-dashed border-accent/50 py-1.5 text-[11px] font-semibold text-accent"
                   >
-                    + Isi Stok Jual
+                    + Tambah Stok
                   </button>
                 )}
                 {bisaTopup && sedangRestock && (
