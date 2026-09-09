@@ -26,6 +26,7 @@ export type ChargeableItem = {
   ml: number;
   hargaPerMl: number;
   ukuranBotolMl?: number; // botol khusus untuk item ini (dipakai katalog belanja)
+  namaBotol?: string; // nama/label botol untuk item ini (mis. "SP 30 Matte Black")
 };
 
 export type CheckoutCalc = {

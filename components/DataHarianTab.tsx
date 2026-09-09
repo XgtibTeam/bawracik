@@ -47,10 +47,7 @@ function ParfumTable({ title, section }: { title: string; section: ParfumSection
           <tbody>
             {section.rows.map((r, i) => (
               <tr key={i} className="border-t border-ink/5">
-                <td className="py-1 text-ink">
-                  {r.namaParfum}
-                  {r.susulan && <span className="ml-1 text-[9px] font-semibold text-warn">SUSULAN</span>}
-                </td>
+                <td className="py-1 text-ink">{r.namaParfum}</td>
                 <td className="py-1 text-ink/60">{r.kode}</td>
                 <td className="py-1 text-right text-ink/60">{r.ml.toLocaleString('id-ID')}</td>
                 <td className="py-1 text-right text-ink/60">{r.hargaPerMl.toLocaleString('id-ID')}</td>

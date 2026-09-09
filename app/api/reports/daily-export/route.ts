@@ -68,7 +68,7 @@ function writeParfumBlock(sheet: ExcelJS.Worksheet, startRow: number, judul: str
   const minRows = Math.max(section.rows.length, 3);
   for (let i = 0; i < minRows; i++) {
     const row = section.rows[i];
-    const vals = row ? [row.namaParfum + (row.susulan ? ' (susulan)' : ''), row.kode, row.ml, row.hargaPerMl, row.harga] : ['', '', '', '', ''];
+    const vals = row ? [row.namaParfum, row.kode, row.ml, row.hargaPerMl, row.harga] : ['', '', '', '', ''];
     vals.forEach((v, c) => {
       const cell = sheet.getCell(r, c + 1);
       cell.value = v === '' ? null : (v as any);

@@ -13,7 +13,14 @@ type PricingConfig = {
   categoryPrices: { kategori: string; hargaPerMl: number }[];
 };
 type Product = { id: string; nama: string; kode: string; kategori?: string };
-type CartItem = { productId?: string; namaParfum: string; ml: number; hargaPerMl: number };
+type CartItem = {
+  productId?: string;
+  namaParfum: string;
+  ml: number;
+  hargaPerMl: number;
+  ukuranBotolMl?: number;
+  namaBotol?: string;
+};
 type Member = {
   id: string;
   nama: string;
@@ -43,6 +50,11 @@ export default function KasirPage() {
   const [pakaiBotol, setPakaiBotol] = useState(false);
   const [namaBotol, setNamaBotol] = useState('');
   const [ukuranBotolMl, setUkuranBotolMl] = useState<number>(5);
+  // NOTE: 3 state di atas sekarang dipakai PER-ITEM (di form "Tambah ke
+  // Keranjang"), bukan lagi satu botol global untuk seluruh transaksi —
+  // di-reset otomatis tiap kali item selesai ditambahkan ke keranjang,
+  // supaya tiap parfum bisa punya botol beda-beda (atau tanpa botol sama
+  // sekali) dan selalu tanya ulang untuk item berikutnya.
 
   const [tipe, setTipe] = useState<'ecer' | 'grosir'>('ecer');
   const [waMember, setWaMember] = useState('');
@@ -235,14 +247,25 @@ export default function KasirPage() {
       ? Math.round((Number(inputValue) || 0) * hargaPerMl)
       : Number(inputValue) || 0;
 
-  const biayaBotol =
+  // Biaya botol untuk item yang LAGI diinput di form "Tambah ke Keranjang"
+  // (belum masuk keranjang) — ditampilkan sebagai preview sebelum ditekan
+  // "Tambah ke Keranjang".
+  const biayaBotolItemAktif =
     pakaiBotol && pricing
       ? (Array.isArray(pricing.bottleTiers) ? pricing.bottleTiers : []).find((t) => ukuranBotolMl >= t.minMl && ukuranBotolMl <= t.maxMl)?.harga ?? 0
       : 0;
 
+  function hitungBiayaBotolItem(ukuran?: number): number {
+    if (!ukuran || !pricing) return 0;
+    return (Array.isArray(pricing.bottleTiers) ? pricing.bottleTiers : []).find((t) => ukuran >= t.minMl && ukuran <= t.maxMl)?.harga ?? 0;
+  }
+
   const subtotalParfum = cart.reduce((s, it) => s + Math.round(it.ml * it.hargaPerMl), 0);
   const totalMl = Math.round(cart.reduce((s, it) => s + it.ml, 0) * 10) / 10;
-  const totalHarga = subtotalParfum + biayaBotol;
+  // Biaya botol SUDAH per-item (tiap parfum bisa beda botol/tanpa botol) —
+  // dijumlah dari semua item yang ada di keranjang, bukan satu angka global.
+  const biayaBotolTotal = cart.reduce((s, it) => s + hitungBiayaBotolItem(it.ukuranBotolMl), 0);
+  const totalHarga = subtotalParfum + biayaBotolTotal;
   const diskon = voucherApplied
     ? voucherApplied.tipe === 'persen'
       ? Math.round((totalHarga * voucherApplied.nilai) / 100)
@@ -292,11 +315,18 @@ export default function KasirPage() {
         namaParfum: gratisMode ? `${selectedProduct.nama} (GRATIS reward)` : selectedProduct.nama,
         ml: mlFromInput,
         hargaPerMl: gratisMode ? 0 : hargaPerMl,
+        ukuranBotolMl: pakaiBotol ? ukuranBotolMl : undefined,
+        namaBotol: pakaiBotol ? namaBotol.trim() || undefined : undefined,
       },
     ]);
     setSelectedProductId('');
     setInputValue('');
     setGratisMode(false);
+    // Reset form botol — setiap parfum baru ditanya ulang dari awal, biar
+    // gak ketinggalan botol punya item sebelumnya.
+    setPakaiBotol(false);
+    setNamaBotol('');
+    setUkuranBotolMl(5);
   }
 
   function removeFromCart(idx: number) {
@@ -376,8 +406,6 @@ export default function KasirPage() {
         body: JSON.stringify({
           cabangId: effectiveCabangId,
           items: cart,
-          ukuranBotolMl: pakaiBotol ? ukuranBotolMl : undefined,
-          namaBotol: pakaiBotol ? namaBotol.trim() || undefined : undefined,
           tipe,
           member:
             tipe === 'ecer'
@@ -721,22 +749,13 @@ export default function KasirPage() {
                 🎁 Mode gratis aktif — parfum berikutnya yang ditambahkan akan GRATIS (reward member)
               </p>
             )}
-            <button
-              onClick={addToCart}
-              disabled={!selectedProduct || (!gratisMode && hargaPerMl <= 0)}
-              className="w-full rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40"
-            >
-              {gratisMode ? '🎁 Tambah Item Gratis' : '+ Tambah ke Keranjang'}
-            </button>
-          </div>
 
-          <div className="ticket mt-4 space-y-2 p-4">
             <label className="flex items-center gap-2 text-sm font-semibold text-ink">
               <input type="checkbox" checked={pakaiBotol} onChange={(e) => setPakaiBotol(e.target.checked)} />
-              Pakai Botol
+              + Tambah Botol untuk parfum ini
             </label>
             {pakaiBotol && (
-              <div className="space-y-2">
+              <div className="space-y-2 rounded-lg bg-paper p-2.5">
                 <input
                   value={namaBotol}
                   onChange={(e) => setNamaBotol(e.target.value)}
@@ -750,9 +769,21 @@ export default function KasirPage() {
                   className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
                   placeholder="Ukuran botol (ml)"
                 />
-                <p className="text-xs text-ink/50">Biaya botol: Rp{biayaBotol.toLocaleString('id-ID')}</p>
+                <p className="text-xs text-ink/50">Biaya botol: Rp{biayaBotolItemAktif.toLocaleString('id-ID')}</p>
               </div>
             )}
+
+            <button
+              onClick={addToCart}
+              disabled={!selectedProduct || (!gratisMode && hargaPerMl <= 0)}
+              className="w-full rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40"
+            >
+              {gratisMode ? '🎁 Tambah Item Gratis' : '+ Tambah ke Keranjang'}
+            </button>
+            <p className="-mt-1 text-center text-[11px] text-ink/40">
+              Botol dipilih per-parfum — kalau parfum berikutnya butuh botol beda (atau tanpa botol), tinggal atur
+              lagi sebelum ditambahkan.
+            </p>
           </div>
 
           {cart.length > 0 && (
@@ -763,6 +794,12 @@ export default function KasirPage() {
                   <li key={i} className="flex items-center justify-between py-2 text-sm">
                     <span>
                       {it.namaParfum} — {it.ml}ml x Rp{it.hargaPerMl.toLocaleString('id-ID')}
+                      {it.ukuranBotolMl && (
+                        <span className="block text-[11px] text-accent">
+                          + {it.namaBotol || `Botol ${it.ukuranBotolMl}ml`} (Rp
+                          {hitungBiayaBotolItem(it.ukuranBotolMl).toLocaleString('id-ID')})
+                        </span>
+                      )}
                     </span>
                     <button onClick={() => removeFromCart(i)} className="text-xs text-danger">
                       Hapus
@@ -782,19 +819,21 @@ export default function KasirPage() {
             <h2 className="font-display text-sm font-semibold text-ink">Ringkasan Pesanan</h2>
             <ul className="mt-2 divide-y divide-ink/10 text-sm">
               {cart.map((it, i) => (
-                <li key={i} className="flex justify-between py-2">
-                  <span>{it.namaParfum}</span>
-                  <span>
-                    {it.ml}ml — Rp{Math.round(it.ml * it.hargaPerMl).toLocaleString('id-ID')}
-                  </span>
+                <li key={i} className="py-2">
+                  <div className="flex justify-between">
+                    <span>{it.namaParfum}</span>
+                    <span>
+                      {it.ml}ml — Rp{Math.round(it.ml * it.hargaPerMl).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                  {it.ukuranBotolMl && (
+                    <div className="flex justify-between text-xs text-accent">
+                      <span>{it.namaBotol || `Botol ${it.ukuranBotolMl}ml`}</span>
+                      <span>Rp{hitungBiayaBotolItem(it.ukuranBotolMl).toLocaleString('id-ID')}</span>
+                    </div>
+                  )}
                 </li>
               ))}
-              {pakaiBotol && (
-                <li className="flex justify-between py-2">
-                  <span>{namaBotol.trim() || `Botol ${ukuranBotolMl}ml`}</span>
-                  <span>Rp{biayaBotol.toLocaleString('id-ID')}</span>
-                </li>
-              )}
             </ul>
             <div className="mt-2 flex justify-between border-t border-ink/10 pt-2 text-sm font-semibold text-ink">
               <span>Total ({totalMl}ml)</span>

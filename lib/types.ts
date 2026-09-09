@@ -169,6 +169,7 @@ export type TransactionItem = {
   ml: number;
   hargaPerMl: number;
   ukuranBotolMl?: number; // botol dipilih untuk item ini spesifik (katalog: tiap produk bisa beda ukuran botol)
+  namaBotol?: string; // nama/label botol untuk item ini (mis. "SP 30 Matte Black")
   subtotal: number; // sudah termasuk biaya botol item ini kalau ada
 };
 
