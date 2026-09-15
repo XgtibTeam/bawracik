@@ -10,6 +10,7 @@
 // ============================================================
 
 import { getTransactions, getStockMovements, getProducts, getStockMonthSnapshots } from './supabase';
+import { todayJakarta } from './tanggal';
 import type { Product } from './types';
 
 export type ProductStockUsage = {
@@ -74,7 +75,7 @@ export type ProductStockStatus = {
  * tiap cabang bisa nampilin sisa stok yang beda-beda).
  */
 export async function computeCurrentStock(params: { cabangId: string; asOf?: string }): Promise<ProductStockStatus[]> {
-  const asOf = params.asOf || new Date().toISOString().slice(0, 10);
+  const asOf = params.asOf || todayJakarta();
   const monthStart = `${asOf.slice(0, 7)}-01`;
   const prevDay = new Date(monthStart);
   prevDay.setDate(prevDay.getDate() - 1);

@@ -11,6 +11,7 @@ import { insertTransaction, getPricingConfig } from './supabase';
 import { hitungCheckout, hitungDiskonVoucher, hitungPoinDariMl, updatePengisian, type ChargeableItem } from './calc';
 import { buildWaMessage, buildWaLink } from './wa-template';
 import { normalizeWa } from './phone';
+import { computeCurrentStock } from './stock';
 import type { TransactionItem } from './types';
 
 export type FinalizeCheckoutInput = {
@@ -37,6 +38,38 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput) {
   const branches = await getBranches();
   const branch = branches.find((b) => b.id === input.cabangId);
   if (!branch) throw new Error('Cabang tidak ditemukan');
+
+  // Validasi stok SEBELUM checkout diproses lebih lanjut — sebelumnya sama
+  // sekali tidak ada pengecekan di sini, jadi kasir tetap bisa checkout
+  // walau stoknya sudah habis/minus (tombol "disabled" di katalog cuma
+  // kosmetik di frontend, gampang kelewat/gak nge-block transaksi beneran).
+  // Item TANPA productId (input manual bebas di kasir, bukan pilih dari
+  // katalog) dilewati, sama seperti getKeluarMlByProduct di lib/stock.ts.
+  // Dilewati juga untuk transaksi SUSULAN (input belakangan buat tanggal
+  // lampau) karena "sisa stok saat ini" bukan acuan yang tepat buat
+  // transaksi yang sebenarnya sudah terjadi di masa lalu.
+  if (!input.susulan) {
+    const diminta = new Map<string, number>();
+    for (const it of input.items) {
+      if (!it.productId) continue;
+      diminta.set(it.productId, (diminta.get(it.productId) || 0) + it.ml);
+    }
+    if (diminta.size > 0) {
+      const stockStatus = await computeCurrentStock({ cabangId: input.cabangId });
+      const sisaMap = new Map(stockStatus.map((s) => [s.productId, s]));
+      const kurang: string[] = [];
+      for (const [productId, mlDiminta] of diminta) {
+        const status = sisaMap.get(productId);
+        const sisa = status?.sisa ?? 0;
+        if (mlDiminta > sisa) {
+          kurang.push(`${status?.nama || productId}: mau ${mlDiminta}ml, sisa cuma ${Math.max(0, sisa)}ml`);
+        }
+      }
+      if (kurang.length > 0) {
+        throw new Error(`Stok gak cukup — ${kurang.join('; ')}. Tambah stok dulu di katalog sebelum checkout.`);
+      }
+    }
+  }
 
   const pricingConfig = await getPricingConfig();
   const calc = hitungCheckout(input.items, pricingConfig, input.ukuranBotolMl);

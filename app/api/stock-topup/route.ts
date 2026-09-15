@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
 import { insertStockMovement } from '@/lib/supabase';
+import { todayJakarta } from '@/lib/tanggal';
 
 // POST /api/stock-topup
 //
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
       id: randomUUID(),
       cabangId,
       productId,
-      tanggal: new Date().toISOString().slice(0, 10),
+      tanggal: todayJakarta(),
       kg: ml / 1000,
       ml,
       createdBy: session.username,

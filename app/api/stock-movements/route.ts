@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
 import { insertStockMovement, getStockMovements } from '@/lib/supabase';
+import { todayJakarta } from '@/lib/tanggal';
 
 // Ledger stok "masuk" — admin/kasir cabang input berapa KG parfum yang baru
 // datang, sistem yang konversi ke ML (1kg = 1000ml) dan mencatatnya sebagai
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
     if (!productId) return NextResponse.json({ error: 'Produk wajib dipilih' }, { status: 400 });
     const kg = Number(body?.kg);
     if (!kg || kg <= 0) return NextResponse.json({ error: 'Jumlah KG harus lebih dari 0' }, { status: 400 });
-    const tanggal = body?.tanggal || new Date().toISOString().slice(0, 10);
+    const tanggal = body?.tanggal || todayJakarta();
 
     const movement = {
       id: randomUUID(),

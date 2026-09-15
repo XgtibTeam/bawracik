@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { getProducts, saveProducts, insertStockMovement } from '@/lib/supabase';
 import { PRODUCT_KATEGORI_LIST } from '@/lib/types';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
+import { todayJakarta } from '@/lib/tanggal';
 
 // Body: { rows: [{ nama, kode?, kategori?, deskripsi?, hargaJual?, imageUrl?, isBotol?, ukuranBotolMl?, stok?/stok_kg? }], cabangId? }
 // Klien parse file Excel/CSV pakai SheetJS dulu (kolom yang didukung:
@@ -145,7 +146,7 @@ export async function POST(req: NextRequest) {
     // Catat stok awal (kalau ada) sebagai stock_movements — dilakukan
     // setelah produk berhasil tersimpan, supaya productId-nya valid.
     if (stokRows.length > 0 && cabangId) {
-      const tanggal = new Date().toISOString().slice(0, 10);
+      const tanggal = todayJakarta();
       for (const s of stokRows) {
         await insertStockMovement({
           id: randomUUID(),
