@@ -13,6 +13,11 @@ type PricingConfig = {
   categoryPrices: { kategori: string; hargaPerMl: number }[];
 };
 type Product = { id: string; nama: string; kode: string; kategori?: string };
+// Default stok awal (ml) yang otomatis di-seed pas karyawan bikin produk baru
+// dari katalog kasir, biar produk baru gak nyangkut di "belum ada data stok
+// sama sekali" nunggu admin input manual. Bisa diubah karyawan per-produk di
+// form Tambah Produk (ini cuma nilai default yang muncul di kolomnya).
+const DEFAULT_STOK_AWAL_ML = 1000;
 type CartItem = {
   productId?: string;
   namaParfum: string;
@@ -98,12 +103,14 @@ export default function KasirPage() {
   const [tambahProdukNama, setTambahProdukNama] = useState('');
   const [tambahProdukKode, setTambahProdukKode] = useState('');
   const [tambahProdukKategori, setTambahProdukKategori] = useState<'biasa' | 'premium' | 'sultan' | 'series'>('biasa');
+  const [tambahProdukStokAwal, setTambahProdukStokAwal] = useState(String(DEFAULT_STOK_AWAL_ML));
   const [tambahProdukSubmitting, setTambahProdukSubmitting] = useState(false);
   const [tambahProdukMsg, setTambahProdukMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
   function bukaFormTambahProduk(namaAwal: string) {
     setTambahProdukNama(namaAwal);
     setTambahProdukKode('');
+    setTambahProdukStokAwal(String(DEFAULT_STOK_AWAL_ML));
     setTambahProdukMsg(null);
     setTambahProdukOpen(true);
   }
@@ -130,11 +137,44 @@ export default function KasirPage() {
         return;
       }
       if (!res.ok) throw new Error(data.error || 'Gagal menambah produk');
+      const produkBaruId = data.product.id;
+      // Seed stok awal biar produk baru gak nyangkut di "belum ada data stok
+      // sama sekali" (yang bikin dia lolos jadi kelihatan "tersedia" padahal
+      // stok fisiknya 0 — ngaruh langsung ke penjualan). Cuma jalan kalau
+      // ada cabang aktif & nilainya > 0; kalau gagal, produk tetap kebuat,
+      // cuma dikasih tau supaya stoknya diisi manual dari tombol "+ Tambah
+      // Stok" di katalog.
+      const stokAwalMl = Math.min(Number(tambahProdukStokAwal) || 0, 2000);
+      let stokAwalWarning = '';
+      if (stokAwalMl > 0 && effectiveCabangId) {
+        try {
+          const stokRes = await fetch('/api/stock-topup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ productId: produkBaruId, ml: stokAwalMl, cabangId: effectiveCabangId }),
+          });
+          if (!stokRes.ok) {
+            const stokData = await stokRes.json().catch(() => ({}));
+            stokAwalWarning = ` (stok awal gagal diisi: ${stokData.error || 'error tidak diketahui'}, isi manual lewat "+ Tambah Stok")`;
+          }
+        } catch {
+          stokAwalWarning = ' (stok awal gagal diisi, isi manual lewat "+ Tambah Stok")';
+        }
+      } else if (stokAwalMl > 0 && !effectiveCabangId) {
+        stokAwalWarning = ' (pilih cabang dulu supaya stok awal ikut keisi, sementara ini isi manual lewat "+ Tambah Stok")';
+      }
       // Refresh katalog & langsung pilih produk yang baru ditambah.
       const refreshed = await fetch('/api/products').then((r) => r.json());
       setProducts(Array.isArray(refreshed.products) ? refreshed.products : []);
-      setSelectedProductId(data.product.id);
-      setTambahProdukOpen(false);
+      setSelectedProductId(produkBaruId);
+      loadStock();
+      if (stokAwalWarning) {
+        // Modal dibiarin kebuka biar pesannya kebaca (produknya udah
+        // kesimpen, cuma stok awalnya belum berhasil keisi otomatis).
+        setTambahProdukMsg({ type: 'error', text: `Produk "${tambahProdukNama.trim()}" tersimpan${stokAwalWarning}` });
+      } else {
+        setTambahProdukOpen(false);
+      }
     } catch (err: any) {
       setTambahProdukMsg({ type: 'error', text: err.message });
     } finally {
@@ -656,6 +696,22 @@ export default function KasirPage() {
                     </option>
                   ))}
                 </select>
+                <div>
+                  <label className="text-[11px] font-medium text-ink/60">Stok awal (ml)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={2000}
+                    value={tambahProdukStokAwal}
+                    onChange={(e) => setTambahProdukStokAwal(e.target.value)}
+                    placeholder={`Default ${DEFAULT_STOK_AWAL_ML}ml`}
+                    className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-accent"
+                  />
+                  <p className="mt-0.5 text-[10px] text-ink/40">
+                    Langsung keisi jadi stok jual di cabang ini. Kosongkan/0 kalau mau isi manual belakangan lewat
+                    &quot;+ Tambah Stok&quot;.
+                  </p>
+                </div>
                 {tambahProdukMsg && (
                   <p className={`text-xs ${tambahProdukMsg.type === 'ok' ? 'text-accent' : 'text-danger'}`}>
                     {tambahProdukMsg.text}

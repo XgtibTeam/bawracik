@@ -125,7 +125,15 @@ export default function ProductCatalog({
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {filtered.map((p) => {
             const img = driveImageUrl(p.imageDriveId);
-            const sisa = stockMap ? stockMap[p.id] : undefined;
+            // Kalau stockMap ada isinya (cabang aktif dipilih) tapi produk
+            // ini gak punya baris di dalamnya sama sekali (mis. baru dibuat
+            // & seed stok awal gagal), JANGAN anggap "belum diketahui" —
+            // anggap 0/habis. Sebelumnya sisa jadi `undefined` di kasus ini,
+            // bikin `habis` ikut false dan produk kelihatan "tersedia" +
+            // tombol beli aktif padahal stok riilnya kosong (bug ngaruh ke
+            // penjualan). `undefined` cuma dipertahankan kalau stockMap-nya
+            // sendiri belum ada (mis. belum pilih cabang).
+            const sisa = stockMap ? (stockMap[p.id] ?? 0) : undefined;
             const habis = sisa !== undefined && sisa <= 0;
             // Dulu cuma nyala kalau `habis` — sekarang selalu nyala di mode
             // kasir biar karyawan bisa nambah stok kapan aja, gak cuma pas
