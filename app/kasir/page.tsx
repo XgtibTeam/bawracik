@@ -108,6 +108,14 @@ export default function KasirPage() {
   const [tambahProdukMsg, setTambahProdukMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
   function bukaFormTambahProduk(namaAwal: string) {
+    if (!effectiveCabangId) {
+      // Jangan biarin buka form kalau cabang belum kedeteksi — kalau tetep
+      // dibuka, stok awal bakal DISKIP TANPA cara nge-retry gampang (harus
+      // isi manual belakangan). Ini juga nutup celah race pas halaman baru
+      // kebuka & session/cabang belum sempat ke-load pas tombol ke-klik.
+      alert('Cabang belum kedeteksi (halaman mungkin baru kebuka) — tunggu sebentar terus coba lagi.');
+      return;
+    }
     setTambahProdukNama(namaAwal);
     setTambahProdukKode('');
     setTambahProdukStokAwal(String(DEFAULT_STOK_AWAL_ML));
@@ -140,41 +148,44 @@ export default function KasirPage() {
       const produkBaruId = data.product.id;
       // Seed stok awal biar produk baru gak nyangkut di "belum ada data stok
       // sama sekali" (yang bikin dia lolos jadi kelihatan "tersedia" padahal
-      // stok fisiknya 0 — ngaruh langsung ke penjualan). Cuma jalan kalau
-      // ada cabang aktif & nilainya > 0; kalau gagal, produk tetap kebuat,
-      // cuma dikasih tau supaya stoknya diisi manual dari tombol "+ Tambah
-      // Stok" di katalog.
+      // stok fisiknya 0 — ngaruh langsung ke penjualan). effectiveCabangId
+      // sudah dipastikan ada sejak form ini dibuka (lihat bukaFormTambahProduk).
       const stokAwalMl = Math.min(Number(tambahProdukStokAwal) || 0, 2000);
-      let stokAwalWarning = '';
-      if (stokAwalMl > 0 && effectiveCabangId) {
+      let stokAwalGagal = '';
+      if (stokAwalMl > 0) {
         try {
           const stokRes = await fetch('/api/stock-topup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ productId: produkBaruId, ml: stokAwalMl, cabangId: effectiveCabangId }),
           });
+          const stokData = await stokRes.json().catch(() => ({}));
           if (!stokRes.ok) {
-            const stokData = await stokRes.json().catch(() => ({}));
-            stokAwalWarning = ` (stok awal gagal diisi: ${stokData.error || 'error tidak diketahui'}, isi manual lewat "+ Tambah Stok")`;
+            stokAwalGagal = stokData.error || `HTTP ${stokRes.status}`;
           }
-        } catch {
-          stokAwalWarning = ' (stok awal gagal diisi, isi manual lewat "+ Tambah Stok")';
+        } catch (e: any) {
+          stokAwalGagal = e?.message || 'network error';
         }
-      } else if (stokAwalMl > 0 && !effectiveCabangId) {
-        stokAwalWarning = ' (pilih cabang dulu supaya stok awal ikut keisi, sementara ini isi manual lewat "+ Tambah Stok")';
+      }
+      // Dipakai window.alert (bukan cuma teks kecil di form) biar hasilnya
+      // gak mungkin kelewat kebaca — dan sengaja dicantumin productId +
+      // cabangId biar gampang dicocokkan langsung ke tabel stock_movements
+      // di Supabase kalau ternyata masih ada yang gak sesuai.
+      if (stokAwalGagal) {
+        alert(
+          `Produk "${tambahProdukNama.trim()}" tersimpan, TAPI stok awal ${stokAwalMl}ml GAGAL diisi:\n${stokAwalGagal}\n\nproductId: ${produkBaruId}\ncabangId: ${effectiveCabangId}\n\nIsi manual lewat "+ Tambah Stok" di katalog.`
+        );
+      } else if (stokAwalMl > 0) {
+        alert(
+          `Produk "${tambahProdukNama.trim()}" tersimpan, stok awal ${stokAwalMl}ml berhasil diisi.\n\nproductId: ${produkBaruId}\ncabangId: ${effectiveCabangId}`
+        );
       }
       // Refresh katalog & langsung pilih produk yang baru ditambah.
       const refreshed = await fetch('/api/products').then((r) => r.json());
       setProducts(Array.isArray(refreshed.products) ? refreshed.products : []);
       setSelectedProductId(produkBaruId);
       loadStock();
-      if (stokAwalWarning) {
-        // Modal dibiarin kebuka biar pesannya kebaca (produknya udah
-        // kesimpen, cuma stok awalnya belum berhasil keisi otomatis).
-        setTambahProdukMsg({ type: 'error', text: `Produk "${tambahProdukNama.trim()}" tersimpan${stokAwalWarning}` });
-      } else {
-        setTambahProdukOpen(false);
-      }
+      setTambahProdukOpen(false);
     } catch (err: any) {
       setTambahProdukMsg({ type: 'error', text: err.message });
     } finally {
